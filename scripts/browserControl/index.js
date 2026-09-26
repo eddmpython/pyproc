@@ -77,5 +77,6 @@ export {
   McpBrowserControl,
   browserToolErrorDetails,
   createBrowserControlTools,
+  assertPermissionRevisionHost,
   parseBrowserControlConfig,
 } from "./mcpBrowserControl.js";

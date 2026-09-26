@@ -18,6 +18,9 @@ import {
   inspectBrowserCompatibility,
 } from "../../scripts/browserControl/browserCompatibility.js";
 import { headlessArgs } from "../../scripts/browserControl/browserLauncher.mjs";
+import { parseBrowserControlConfig, reviseBrowserControlConfig } from "../../scripts/browserControl/mcpBrowserControl.js";
+import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
+import { RecordingSpace } from "../../scripts/automationSpace/recordingSpace.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -312,8 +315,10 @@ export async function assertBrowserControlContract() {
   blankTransport.targets[0].url = "";
   blankTransport.describeOverride = { type: "page", url: "http://denied.test/after-attach", title: "denied" };
   const deniedAfterAttach = await errorOf(() => blankPort.attach(blankTarget.targetRef));
-  assert(deniedAfterAttach?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied,
-    "blank browser-level URL 뒤 session-level origin 재검사가 실패했다");
+  assert(deniedAfterAttach?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld
+    && blankTransport.targets.length === 2
+    && blankPort.inspect().heldSurfaces.some((held) => held.targetRef === blankTarget.targetRef),
+  "blank browser-level URL 뒤 session-level origin이 권한 밖이면 target을 닫지 않고 보류해야 한다");
   assert(blankTransport.sessions.size === 0, "post-attach origin 거부 뒤 raw debugger session이 남았다");
   await blankPort.close();
 
@@ -421,11 +426,31 @@ export async function assertBrowserControlContract() {
   const riskMismatch = await errorOf(() => port.send(session, { method: "Runtime.evaluate", expectedRisk: "read" }));
   assert(riskMismatch?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied && riskMismatch.outcome === "notSent", "명령 위험도 오인을 전송 전에 거부하지 않았다");
 
-  transport.targets[0].url = "http://denied.test/after-attach";
+  transport.targets[0].url = "http://denied.test/after-attach?token=secret#fragment";
   const originSwap = await errorOf(() => port.send(session, { method: "DOM.getDocument" }));
-  assert(originSwap?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied, "attach 뒤 origin 변경을 거부하지 않았다");
-  assert(!originSwap.message.includes("denied.test"), "permission error에 denied target URL이 노출됐다");
+  assert(originSwap?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld && originSwap.outcome === "notSent",
+    "attach 뒤 권한 밖으로 간 surface를 보류하지 않았다");
+  assert(!originSwap.message.includes("denied.test")
+    && JSON.stringify(originSwap.details) === JSON.stringify({ targetRef: session.targetRef, origin: "http://denied.test",
+      path: "/after-attach" }),
+  "보류 통지가 도착 origin과 경로만 알리지 않았다(메시지에 URL, 또는 query와 fragment가 새었다)");
   assert((await port.listTargets()).length === 0, "권한 밖으로 이동한 target metadata를 열거했다");
+  assert(port.sessionHeld(session) && port.inspect().heldSurfaces.some((held) => held.origin === "http://denied.test"),
+    "보류된 surface가 inspect에 보이지 않는다");
+  // Widening to where the surface went lets the same session go on; narrowing again holds it again.
+  const allowedPolicy = port.policy;
+  const widened = await port.revisePolicy(new BrowserControlPolicy({
+    targetOrigins: ["http://allowed.test", "http://denied.test"],
+    methods: ["DOM.getDocument", "DOM.setAttributeValue", "Runtime.evaluate", "Page.handleJavaScriptDialog"],
+    events: ["Network.requestWillBeSent"],
+    maxRisk: "externalEffect",
+  }));
+  const continued = await port.send(session, { method: "DOM.getDocument" });
+  assert(widened.targetOrigins.includes("http://denied.test") && continued.state === "observed" && !port.sessionHeld(session),
+    "권한을 넓힌 뒤 같은 session이 이어지지 않았다");
+  await port.revisePolicy(allowedPolicy);
+  const narrowed = await errorOf(() => port.send(session, { method: "DOM.getDocument" }));
+  assert(narrowed?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld, "권한을 좁힌 뒤 다음 명령이 보류되지 않았다");
   transport.targets[0].url = "http://allowed.test/app";
   await port.send(session, { method: "DOM.getDocument" });
 
@@ -505,5 +530,87 @@ export async function assertBrowserControlContract() {
   await port.close();
   const closed = await errorOf(() => port.listTargets());
   assert(closed?.code === BROWSER_CONTROL_ERROR_CODES.brokerUnavailable && transport.closed, "broker close가 unavailable로 수렴하지 않았다");
+
+  // Live revision: every surface is judged against the new permission at once, where it was last seen.
+  const revisionTransport = new FakeTransport();
+  revisionTransport.targets.push({ id: "second", type: "page", url: "http://allowed.test/second", title: "second" });
+  let revisionId = 0;
+  const policyFor = (origins) => new BrowserControlPolicy({ targetOrigins: origins, methods: ["DOM.getDocument"],
+    events: ["Network.requestWillBeSent"], maxRisk: "read" });
+  const revisionPort = new BrowserControlPort({ transport: revisionTransport, policy: policyFor(["http://allowed.test"]),
+    brokerId: "broker-revision", idFactory: () => `r${++revisionId}` });
+  const [firstTarget, secondTarget] = await revisionPort.listTargets();
+  const revisionSession = await revisionPort.attach(firstTarget.targetRef);
+  const heard = [];
+  revisionPort.subscribe(revisionSession, (event) => heard.push(event.method));
+  await revisionPort.revisePolicy(policyFor(["http://other.test"]));
+  revisionTransport.emit("allowed", "Network.requestWillBeSent", { request: { url: "http://allowed.test/data" } });
+  const heldAfterNarrowing = revisionPort.inspect().heldSurfaces.map((entry) => entry.targetRef).sort();
+  const attachHeld = await errorOf(() => revisionPort.attach(secondTarget.targetRef));
+  const reattachHeld = await errorOf(() => revisionPort.attach(firstTarget.targetRef));
+  assert(revisionPort.sessionHeld(revisionSession) && heard.length === 0
+    && JSON.stringify(heldAfterNarrowing) === JSON.stringify([firstTarget.targetRef, secondTarget.targetRef].sort())
+    && attachHeld?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld
+    && reattachHeld?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld
+    && ["allowed", "second"].every((id) => revisionTransport.targets.some((target) => target.id === id)),
+  "권한을 좁히면 붙은 surface와 붙지 않은 target이 곧바로 보류되고, event가 멈추며, attach가 target을 닫지 않아야 한다");
+  await revisionPort.revisePolicy(policyFor(["http://allowed.test"]));
+  const releasedHeld = revisionPort.sessionHeld(revisionSession) || revisionPort.inspect().heldSurfaces.length > 0;
+  const secondSession = await revisionPort.attach(secondTarget.targetRef);
+  const resumed = await revisionPort.send(revisionSession, { method: "DOM.getDocument" });
+  assert(!releasedHeld && resumed.state === "observed" && secondSession.targetRef === secondTarget.targetRef,
+    "권한을 다시 넓히면 보류가 곧바로 풀리고 같은 session과 target이 이어져야 한다");
+  // A main-frame navigation says where the surface is before its next request.
+  revisionTransport.emit("allowed", "Page.frameNavigated", { frame: { id: "main", url: "http://gone.test/next" } });
+  const heldByNavigation = revisionPort.sessionHeld(revisionSession);
+  revisionTransport.emit("allowed", "Page.frameNavigated", { frame: { id: "main", url: "http://allowed.test/back" } });
+  assert(heldByNavigation && !revisionPort.sessionHeld(revisionSession),
+    "main frame 이동이 surface의 위치를 다음 요청 전에 반영하지 않았다");
+
+  // The manifest opts a controller host in; other providers and unknown values are refused.
+  const optInBase = { schemaVersion: 1, engine: { enabled: false }, browser: { enabled: true,
+    allowedOrigins: ["https://work.example"], maxRisk: "read", actions: ["snapshot"] } };
+  const withRevision = (value, extra = {}) => validateMcpProductConfig({ ...optInBase,
+    browser: { ...optInBase.browser, permissionRevision: value, ...extra } });
+  const refusedOptIn = (value, extra) => { try { withRevision(value, extra); return null; } catch (error) { return error; } };
+  assert(withRevision("controller").env.PYPROC_BROWSER_PERMISSION_REVISION === "controller"
+    && withRevision("off").env.PYPROC_BROWSER_PERMISSION_REVISION === undefined
+    && /off or controller/.test(String(refusedOptIn("yes")?.message))
+    && /nativeCdp or userBrowser/.test(String(refusedOptIn("controller", { provider: "frame" })?.message)),
+  "권한 개정 옵트인이 manifest에서 검증되지 않았다");
+  const recordingSpace = new RecordingSpace({ provider: { spaceId: "space:record", providerKind: "fake",
+    operations: ["automation.observe", "automation.permission.revise"] }, file: "recording.json" });
+  assert(!recordingSpace.operations.includes("automation.permission.revise"),
+    "기록 중인 공간이 권한 개정을 받는다");
+
+  // Revision input: the same rules as at start, ceilings from the start, a string reference to grow anything.
+  const exactStart = parseBrowserControlConfig({ PYPROC_BROWSER_ALLOWED_ORIGINS: "http://a.test",
+    PYPROC_BROWSER_MAX_RISK: "externalEffect", PYPROC_BROWSER_ACTIONS: "snapshot,click",
+    PYPROC_BROWSER_EXTERNAL_EFFECTS: "acknowledged", PYPROC_BROWSER_PURPOSE: "revision contract" });
+  const both = ["http://a.test", "http://b.test"];
+  const refusal = (input, current = exactStart, start = exactStart) => {
+    try { reviseBrowserControlConfig(start, current, input); return null; } catch (error) { return error; }
+  };
+  for (const input of [{ allowedOrigins: both }, { allowedOrigins: both, reference: null },
+    { allowedOrigins: both, reference: {} }, { allowedOrigins: both, reference: 42 }, { maxRisk: ["read"] },
+    { allowedOrigins: [] }, { allowedOrigins: ["*"], reference: "r" }, { actions: ["snapshot", "click", "fill"],
+      reference: "r" }, { unknown: true }, { allowedOrigins: ["http://a.test/path"], reference: "r" }]) {
+    assert(refusal(input)?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+      `권한 개정이 거절되지 않았다: ${JSON.stringify(input)}`);
+  }
+  const widenedConfig = reviseBrowserControlConfig(exactStart, exactStart, { allowedOrigins: both, reference: "approval:1" });
+  const narrowedConfig = reviseBrowserControlConfig(exactStart, widenedConfig.config, { allowedOrigins: ["http://a.test"],
+    actions: ["snapshot"] });
+  const restored = reviseBrowserControlConfig(exactStart, narrowedConfig.config, { actions: ["snapshot", "click"],
+    reference: "approval:2" });
+  assert(widenedConfig.widened && !narrowedConfig.widened && restored.widened
+    && refusal({ actions: ["snapshot", "click"] }, narrowedConfig.config)?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+  "넓히기와 시작값까지 되돌리기는 참조를 요구하고 좁히기는 요구하지 않아야 한다");
+  const anyStart = parseBrowserControlConfig({ PYPROC_BROWSER_ALLOWED_ORIGINS: "*", PYPROC_BROWSER_REQUESTS: "safe",
+    PYPROC_BROWSER_ACTIONS: "snapshot" });
+  const fromAny = reviseBrowserControlConfig(anyStart, anyStart, { allowedOrigins: ["http://a.test"] });
+  assert(!fromAny.widened && refusal({ allowedOrigins: ["*"] }, fromAny.config, anyStart)
+    && reviseBrowserControlConfig(anyStart, fromAny.config, { allowedOrigins: ["*"], reference: "r" }).widened,
+  "* 에서 정확한 origin으로 좁히기는 참조 없이, * 로 되돌리기는 참조와 함께만 되어야 한다");
   return true;
 }

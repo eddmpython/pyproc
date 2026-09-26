@@ -19,7 +19,7 @@ assert firstResult["python"]["method"] == "runPython"
 assert firstResult["mcp"]["tool"] == "pythonRun"
 
 with PyProcClient.start(configPath, startupTimeout=60.0) as client:
-    assert len(client.operations) == 34
+    assert len(client.operations) == 35 and "automation.permission.revise" in client.operations
     firstMachine = getattr(client, firstResult["python"]["method"])(
         *firstResult["python"]["arguments"], timeout=60.0)
     assert firstMachine.output["value"] == "42"
@@ -166,6 +166,20 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     assert first.output["value"] == "42" and duplicate is not None
     assert duplicate.code == "CONTROL_REQUEST_DUPLICATE"
     assert client.runPython("'duplicateEffect' in globals()", timeout=30.0).output["value"] == "False"
+
+    # The Python client revises the running permission: widening needs a reference, narrowing back does not.
+    ownOrigin = targetUrl.split("/product")[0]
+    widening = None
+    try:
+        client.revisePermission({"allowedOrigins": [ownOrigin, "https://example.com"]}, timeout=30.0)
+    except ControlError as error:
+        widening = error
+    assert widening is not None and widening.code == "BROWSER_CONTROL_PERMISSION_DENIED"
+    widened = client.revisePermission({"allowedOrigins": [ownOrigin, "https://example.com"],
+                                       "reference": "approval:python"}, timeout=30.0)
+    narrowed = client.revisePermission({"allowedOrigins": [ownOrigin]}, timeout=30.0)
+    assert widened.output["widened"] is True and narrowed.output["widened"] is False
+    assert narrowed.output["permission"]["targetOrigins"] == [ownOrigin]
 
 print(json.dumps({"ok": True, "operations": len(client.operations), "checkpoint": checkpoint.output["index"],
                   "attachmentBytes": attachment.byteLength, "cancelOutcome": cancelError.outcome,

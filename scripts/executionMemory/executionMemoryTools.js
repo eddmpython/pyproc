@@ -110,7 +110,9 @@ export async function createExecutionMemoryHandlers({
   secretValues = [],
 }) {
   const registry = await createExecutionMemoryRegistry({ root, secretValues });
-  const permissions = await registry.artifacts.capturePermissions(permissionManifest);
+  // Revisions carry the permission in force when they are made; a live permission revision replaces it (the registry
+  // then records it in every later revision, whoever makes it).
+  let permissions = await registry.artifacts.capturePermissions(permissionManifest);
   const roots = Object.freeze([resolve(root), ...importRoots.map((importRoot) => resolve(importRoot))]);
 
   // A browser-only host has no Machine page: its revisions carry machine null.
@@ -145,7 +147,13 @@ export async function createExecutionMemoryHandlers({
 
   return Object.freeze({
     registry,
-    permissions,
+    get permissions() { return permissions; },
+    /** Capture a revised permission manifest (with the caller's reference) for every later revision. */
+    async revisePermissions(manifest) {
+      permissions = await registry.artifacts.capturePermissions(manifest);
+      registry.revisePermissions(permissions);
+      return permissions;
+    },
     captureMachine,
     captureBrowser,
     captureEvidence,

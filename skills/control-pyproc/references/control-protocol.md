@@ -93,21 +93,37 @@ The four machine operations are always present:
 | `machine.reset` | Restore the prepared boot state | `applied` |
 
 Two effect-free verification operations, `verification.verify` and `verification.replay`, are also present in a
-browser-disabled installed profile. When the manifest enables browser authority, ten automation operations and
-`verification.audit` appear:
+browser-disabled installed profile. When the manifest enables browser authority, eleven automation operations (twelve
+with live permission revision) and `verification.audit` appear:
 
 | Operation | Meaning |
 |---|---|
 | `automation.space.inspect` | Inspect provider, policy, limits, and provider-neutral live resource ownership |
 | `automation.target.list` | List allowed targets |
 | `automation.target.open` | Open an allowed URL |
+| `automation.target.close` | Close a target this host opened |
 | `automation.session.attach` | Create an opaque controlled session |
 | `automation.observe` | Return or continue a bounded legacy semantic inventory, APX graph, or goal-specific SituationCapsule |
 | `automation.act` | Run an ordered high-level action pipeline |
 | `automation.command` | Send one separately allowlisted low-level command |
 | `automation.session.detach` | Drop session-owned state and detach |
+| `automation.permission.revise` | Replace the running browser permission (only when the manifest sets `browser.permissionRevision: "controller"`; widening needs the caller's approval reference) |
 | `artifact.read` | Read a bounded artifact chunk |
 | `artifact.delete` | Delete an artifact explicitly |
+
+A tab that lands outside the permission (a redirect, a link, a new tab the site sends elsewhere) is held rather than
+dropped: the request fails with `BROWSER_CONTROL_SURFACE_HELD`, whose `details` name the `targetRef`, the `origin`, and
+the `path` it reached (never its query or fragment), and every later request on it is refused the same way. After
+`automation.permission.revise` widens the allowed origins to it, the same tab and session go on; narrowing holds a tab
+again, at once, and detaching a held session closes its tab. Origins change freely (at least one, and `*` only on a
+host that started with it); actions, raw methods, maxRisk, and file roots narrow or come back up to what the host
+started with. Revisions run one at a time. Execution Memory records each one before it takes effect, so a revision it
+refuses changes nothing, and every later revision of any session (effect checkpoints included) carries the revised
+permission with its reference; a handoff import approves the head's permission. A request already running re-checks
+each action before it runs it. The `userBrowser` and `nativeCdp` providers support it; `frame` does not. In the user's
+own browser a held tab the user handed over is reported without its place. The operation exists only when the
+manifest sets `browser.permissionRevision: "controller"` (nativeCdp or userBrowser, not while recording): it is for the
+product's own controller, and MCP never offers it, since an agent there could approve its own widening.
 
 The operation names, error outcomes, permission checks, action catalog, and artifacts are owned by the shared
 host. The MCP adapter only maps tool names and native image content. This prevents the native and MCP paths

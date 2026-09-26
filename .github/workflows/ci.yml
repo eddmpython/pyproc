@@ -131,6 +131,10 @@ jobs:
       - run: npm run test:request-guard
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # 실행 중 권한 개정: 권한 밖에 착지한 탭은 보류되고, 참조를 붙여 넓히면 같은 탭에서 이어진다.
+      - run: npm run test:permission-revision
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       - run: npm run test:automation-lifecycle
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -195,6 +199,7 @@ jobs:
       - run: npm run test:browser-control
       - run: npm run test:browser-control-stress
       - run: npm run test:request-guard
+      - run: npm run test:permission-revision
       - run: npm run test:automation-lifecycle
       - run: npm run test:action-convergence
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

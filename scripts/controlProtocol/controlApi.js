@@ -502,6 +502,9 @@ export class PyProcControlClient extends ControlStdioClient {
   detachSession(sessionRef, options = {}) {
     return this.request("automation.session.detach", { sessionRef }, options);
   }
+  revisePermission(revision, options = {}) {
+    return this.request("automation.permission.revise", revision, options);
+  }
   readArtifact(artifactRef, { offset, maxBytes, ...options } = {}) {
     return this.request("artifact.read", { artifactRef,
       ...(offset === undefined ? {} : { offset }), ...(maxBytes === undefined ? {} : { maxBytes }) }, options);

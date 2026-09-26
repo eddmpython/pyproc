@@ -1,6 +1,6 @@
 // browserControlBroker.mjs - 임시 profile 브라우저의 CDP pipe authority를 제한된 port로 감싸는 Node broker.
 import { CdpConnection } from "./cdpConnection.mjs";
-import { BrowserControlError, BrowserControlPort, BROWSER_CONTROL_ERROR_CODES } from "./browserControlPort.js";
+import { BrowserControlError, BrowserControlPort, BROWSER_CONTROL_ERROR_CODES, heldPlace } from "./browserControlPort.js";
 import { BrowserControlPolicy, BROWSER_CONTROL_RISKS } from "./browserControlPolicy.js";
 import { NodeCdpTransport } from "./nodeCdpTransport.js";
 import { assertBrowserCompatibility } from "./browserCompatibility.js";
@@ -50,7 +50,7 @@ export function cdpTargets(connection) {
 
 export class NodeBrowserControlBroker {
   constructor({ connection, port, compatibility, timeoutMs = DEFAULT_TIMEOUT_MS, viewport = null, guard = null,
-    targets = cdpTargets(connection) } = {}) {
+    targets = cdpTargets(connection), holdOutside = false } = {}) {
     if (!connection || !port) throw new TypeError("connection and port are required");
     this._connection = connection;
     this._targets = targets;
@@ -60,6 +60,10 @@ export class NodeBrowserControlBroker {
     this._timeoutMs = timeoutMs;
     this._viewport = viewport;
     this._ownedTargets = new Set();
+    // Whether a new tab the site sends outside the permission is kept for a widening (only when the host can widen).
+    this._holdOutside = holdOutside === true;
+    // In the user's own browser only the tabs this broker opened may tell where they went.
+    if (targets.kind === "user-browser") this.port.revealsPlace = (targetRef) => this._ownedTargets.has(String(targetRef));
   }
 
   listTargets() { return this.port.listTargets(); }
@@ -74,7 +78,23 @@ export class NodeBrowserControlBroker {
     }
   }
   command(sessionRef, command, { signal } = {}) { return this.port.send(sessionRef, command, { signal }); }
-  detach(sessionRef) { return this.port.detach(sessionRef); }
+  /** Detach a session; a task surface still held outside the permission is closed, not left behind. Returns the
+   * reference of the target it closed, or null. */
+  async detach(sessionRef) {
+    const closeHeld = this.port.sessionHeld(sessionRef) && this._ownedTargets.has(String(sessionRef?.targetRef || ""));
+    await this.port.detach(sessionRef);
+    if (!closeHeld) return null;
+    await this.closeTarget(sessionRef.targetRef);
+    return String(sessionRef.targetRef);
+  }
+
+  /** The policy a revision of this running broker would put in force (the same checks as at start, with the request
+   * scope and download folder it started with); `port.revisePolicy` puts it in force. */
+  permissionPolicy({ targetOrigins, methods, events = [], fileRoots = [], maxRisk }) {
+    assertBrowserRequestScope({ requests: this._guard ? "safe" : "any", targetOrigins });
+    return new BrowserControlPolicy({ targetOrigins, methods, events, fileRoots,
+      downloadRoot: this.port.policy.downloadRoot, maxRisk });
+  }
   async closeTarget(targetRef) {
     if (!this._ownedTargets.has(String(targetRef))) {
       throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
@@ -106,6 +126,7 @@ export class NodeBrowserControlBroker {
     let sessionId = "";
     let unsubscribe = null;
     let created = false;
+    let held = false;
     const events = [];
     let rawEventsTruncated = false;
     try {
@@ -122,6 +143,12 @@ export class NodeBrowserControlBroker {
       await this._connection.send("Network.enable", {}, sessionId);
       if (this._viewport) {
         await applyBrowserViewport((method, params) => this._connection.send(method, params, sessionId), this._viewport);
+      }
+      // A revision may have narrowed the permission while the tab was prepared; checked in the turn that navigates.
+      if (!this.port.policy.allowsTarget({ id: "candidate", type: "page", url: normalized, title: "" })
+        || BROWSER_CONTROL_RISKS[this.port.policy.maxRisk] < BROWSER_CONTROL_RISKS.externalEffect) {
+        throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+          "the browser permission changed while the target opened", { outcome: "notSent" });
       }
       const navigation = await this._connection.send("Page.navigate", { url: normalized }, sessionId);
       // 인증서 실패는 원인을 지목한다: 호출자가 자기 코드를 의심하지 않고 browser.trustedCertificates를 본다.
@@ -160,10 +187,24 @@ export class NodeBrowserControlBroker {
         await delay(RETRY_MS);
       }
       if (!finalTarget) throw new Error(`navigation did not reach ${waitUntil}: ${normalized}`);
-      try { this.port.policy.authorizeTarget(finalTarget); }
-      catch (error) {
+      if (!this.port.policy.allowsTarget(finalTarget) && !this._holdOutside) {
         throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
-          "browser navigation final URL is outside permission", { outcome: "applied", cause: error });
+          "browser navigation final URL is outside permission", { outcome: "applied",
+            details: heldPlace(finalTarget.url) });
+      }
+      if (!this.port.policy.allowsTarget(finalTarget)) {
+        // The page sent the new tab elsewhere: the tab is kept, held, and the caller learns where it went; widening
+        // the permission to that origin lets it attach to the same tab, closing it discards it.
+        unsubscribe();
+        unsubscribe = null;
+        await this._targets.detach(sessionId);
+        sessionId = "";
+        const targetRef = this.port.holdTarget(finalTarget);
+        this._ownedTargets.add(targetRef);
+        held = true;
+        throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.surfaceHeld,
+          "browser navigation arrived outside permission; the tab is held until the permission is widened or it is closed",
+          { outcome: "applied", details: Object.freeze({ targetRef, ...heldPlace(finalTarget.url) }) });
       }
       unsubscribe();
       unsubscribe = null;
@@ -184,13 +225,27 @@ export class NodeBrowserControlBroker {
             }),
           });
         } catch (error) {
+          if (error?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld) {
+            // Narrowed while it opened: this task's own tab, held with its place, or closed on a host that cannot widen.
+            this._ownedTargets.add(error.details.targetRef);
+            if (!this._holdOutside) {
+              await Promise.allSettled([this.closeTarget(error.details.targetRef)]);
+              throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+                "browser navigation final URL is outside permission", { outcome: "applied",
+                  details: heldPlace(finalTarget.url) });
+            }
+            held = true;
+            throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.surfaceHeld, error.message,
+              { outcome: "applied", details: Object.freeze({ targetRef: error.details.targetRef,
+                ...heldPlace(finalTarget.url) }) });
+          }
           if (error?.code !== BROWSER_CONTROL_ERROR_CODES.targetUnavailable) throw error;
         }
         await delay(RETRY_MS);
       }
       throw new Error(`opened browser target did not become visible: ${finalTarget.url}`);
     } catch (error) {
-      if (created) await Promise.allSettled([this._targets.close(targetId)]);
+      if (created && !held) await Promise.allSettled([this._targets.close(targetId)]);
       if (error instanceof BrowserControlError) throw error;
       throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
         `opened browser target did not become ready: ${normalized}`, {
@@ -233,6 +288,7 @@ export async function connectNodeBrowserControl({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   viewport = null,
   requests = "any",
+  holdOutside = false,
 } = {}) {
   assertBrowserRequestScope({ requests, targetOrigins });
   const policy = new BrowserControlPolicy({ targetOrigins, methods, events, fileRoots, downloadRoot, maxRisk });
@@ -243,7 +299,7 @@ export async function connectNodeBrowserControl({
     // Installed before the first target is opened, so no request of the session ever runs unguarded.
     guard = requests === "safe" ? await RequestGuard.install(connection) : null;
     const port = new BrowserControlPort({ transport: new NodeCdpTransport(connection), policy });
-    return new NodeBrowserControlBroker({ connection, port, compatibility, timeoutMs, viewport, guard });
+    return new NodeBrowserControlBroker({ connection, port, compatibility, timeoutMs, viewport, guard, holdOutside });
   } catch (error) {
     guard?.close();
     connection.close();

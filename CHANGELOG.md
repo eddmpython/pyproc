@@ -12,6 +12,48 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **Live permission revision.** A manifest that sets `browser.permissionRevision: "controller"` (nativeCdp or
+  userBrowser, not while recording) gives its Control clients `automation.permission.revise` (JavaScript
+  `revisePermission()`, Python `revisePermission()`); MCP never offers it, since an agent there could approve its own
+  widening. It replaces the running browser permission without restarting:
+  allowed origins change freely (at least one; `*` only on a host that started with it); actions, raw methods, maxRisk,
+  and file roots narrow or come back up to what the host started with. Anything that grows authority needs the caller's
+  string `reference` to the approval behind it. Revisions run one at a time; Execution Memory records each before it
+  takes effect (a revision it refuses changes nothing), and every later revision of any session, effect checkpoints
+  included, carries the revised permission (origins, actions, raw methods, maxRisk, file roots by digest) and reference.
+  Execution Memory's permission manifest now records raw methods and file-root digests on every host, so its digest
+  differs from earlier versions'. Every surface is judged against a revision at once: one now
+  outside is held and its events stop, one now inside goes on. A request already running re-checks each action before
+  it runs it. Supported by the `nativeCdp` and `userBrowser` providers.
+
+### Changed
+
+- A tab that lands outside the permission is held instead of dropped: attaching to a tab outside the permission holds it
+  instead of closing it, a session whose tab navigated away is held rather than left unverifiable, and on a host that
+  enables permission revision a new tab the site redirects elsewhere stays open, held (elsewhere it is closed as before,
+  and the refusal now names where it went). The request fails with
+  `BROWSER_CONTROL_SURFACE_HELD` (it used to be `BROWSER_CONTROL_PERMISSION_DENIED` without a place), whose `details`
+  name the `targetRef`, `origin`, and `path` reached, never the query or fragment (in the user's own browser, only for
+  tabs the task opened). Widening the permission to that
+  origin lets the same tab and session go on; detaching a held session closes its tab. A popup outside the permission is
+  still closed, and its refusal now names the origin and path it reached.
+
+### 한국어 요약
+
+- 실행 중 권한 개정: manifest가 `browser.permissionRevision: "controller"`로 켠 host의 Control client에만
+  `automation.permission.revise`가 열린다(MCP에는 열지 않음, 녹화 중에는 켤 수 없음). 브라우저를 다시 시작하지 않고
+  권한을 바꾼다. 허용 origin은
+  자유롭게 바꾸고(하나 이상, `*`는 그것으로 시작한 host만), actions, raw method, maxRisk, file root는 시작 때 값을
+  천장으로 좁히거나 되돌린다. 권한을 키우는 개정은 문자열 승인 참조(`reference`)가 있어야 한다. 개정은 하나씩 돌고,
+  Execution Memory가 적용 전에 기록하므로 기록이 거절한 개정은 아무것도 바꾸지 않으며, 이후 모든 revision(effect
+  checkpoint 포함)이 개정된 권한과 참조를 싣는다. 개정 즉시 모든 surface를 다시 판정하고, 진행 중인 요청도 action마다
+  허용을 다시 확인한다.
+- 권한 밖에 착지한 탭은 버리지 않고 보류한다. 요청은 `BROWSER_CONTROL_SURFACE_HELD`로 끝나며 `details`가 도착
+  origin과 경로(query와 fragment 제외)를 알린다. 권한을 그 origin까지 넓히면 같은 탭과 세션에서 이어지고, 보류된
+  세션을 떼면 그 탭을 닫는다. 권한 밖 popup은 여전히 닫되 도착 origin과 경로를 알린다.
+
 ## 0.0.31 - 2026-09-26
 
 ### Added

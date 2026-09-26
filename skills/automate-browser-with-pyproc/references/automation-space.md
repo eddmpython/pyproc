@@ -19,15 +19,17 @@ isolated frame, or a recorded replay. It does not add a JavaScript package expor
 
 ## Canonical operations
 
-Every provider declares a stable `spaceId`, a `providerKind`, and a supported subset of ten operations:
+Every provider declares a stable `spaceId`, a `providerKind`, and a supported subset of twelve operations:
 
 ```text
 automation.space.inspect
 automation.target.list
 automation.target.open
+automation.target.close
 automation.session.attach
 automation.command
 automation.session.detach
+automation.permission.revise
 automation.observe
 automation.act
 artifact.read

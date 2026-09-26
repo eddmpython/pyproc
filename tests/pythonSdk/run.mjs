@@ -159,6 +159,10 @@ run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installe
   "--enable-effect-transactions", "--effect-approval-authority", `operator:python-product=${approvalKeyFile}`,
   "--action", "click",
   ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
+// The product journey revises its permission live, which a manifest must enable for its controller.
+const productConfig = JSON.parse(await readFile(configPath, "utf8"));
+productConfig.browser.permissionRevision = "controller";
+await writeFile(configPath, JSON.stringify(productConfig, null, 2));
 await writeFile(frameConfigPath, JSON.stringify({
   schemaVersion: 1,
   engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") },
@@ -210,7 +214,7 @@ try {
     env: { ...process.env, PATH: `${productPath}${delimiter}${process.env.PATH || ""}` } });
   const report = JSON.parse(journey.stdout.trim().split(/\r?\n/).at(-1));
   check("wheel 설치본이 Python, checkpoint, cancel, permission, screenshot 여정을 완주",
-    report.ok === true && report.operations === 34
+    report.ok === true && report.operations === 35
       && Number.isSafeInteger(report.checkpoint) && report.checkpoint >= 0
       && report.attachmentBytes > 0 && report.cancelOutcome === "outcomeUnknown"
       && report.cancelTerminal === "outcomeUnknown" && report.timeoutOutcome === "outcomeUnknown"

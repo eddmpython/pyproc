@@ -13,6 +13,7 @@ export const CONTROL_TOOL_OPERATIONS = Object.freeze({
   browserAttach: "automation.session.attach",
   browserCommand: "automation.command",
   browserDetach: "automation.session.detach",
+  browserRevisePermission: "automation.permission.revise",
   browserObserve: "automation.observe",
   browserAct: "automation.act",
   browserArtifactRead: "artifact.read",
@@ -67,6 +68,10 @@ export const CONTROL_TOOL_OPERATIONS = Object.freeze({
   motorPolicyRollback: "motor.policy.rollback",
 });
 
+// Tools for the product's own controller only: never offered to an agent over MCP, which could otherwise approve its own
+// requests (a permission revision widens what the agent may reach).
+export const CONTROLLER_ONLY_TOOLS = Object.freeze(["browserRevisePermission"]);
+
 const TOOL_FOR_OPERATION = Object.freeze(Object.fromEntries(
   Object.entries(CONTROL_TOOL_OPERATIONS).map(([tool, operation]) => [operation, tool]),
 ));
@@ -92,6 +97,7 @@ export function controlSuccessOutcome(operation, input = {}) {
   if (operation === "machine.run" || operation === "machine.image.export" || operation.startsWith("machine.checkpoint.")
     || operation === "machine.reset" || operation === "automation.target.open"
     || operation === "automation.session.attach" || operation === "automation.session.detach"
+    || operation === "automation.permission.revise"
     || operation === "artifact.delete" || operation.startsWith("memory.") || operation.startsWith("effect.")
     || operation.startsWith("app.") || operation.startsWith("world.") || operation.startsWith("motor.")) return "applied";
   return "observed";

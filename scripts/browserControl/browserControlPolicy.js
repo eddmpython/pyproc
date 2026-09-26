@@ -157,6 +157,11 @@ export class BrowserControlPolicy {
     }
   }
 
+  /** The folder downloads are confined to, fixed when the browser starts (null when downloads are refused). */
+  get downloadRoot() {
+    return this._downloadRoot;
+  }
+
   allowsTarget(target) {
     if (!target || !this._targetTypes.has(String(target.type || ""))) return false;
     return this._allowsOrigin(targetOrigin(target.url));

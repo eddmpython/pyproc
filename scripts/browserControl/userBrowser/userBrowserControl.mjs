@@ -30,6 +30,7 @@ export async function connectUserBrowserControl({
   timeoutMs = 30000,
   viewport = null,
   requests = "any",
+  holdOutside = false,
   env = process.env,
 } = {}) {
   assertBrowserRequestScope({ requests, targetOrigins });
@@ -40,7 +41,7 @@ export async function connectUserBrowserControl({
     const compatibility = assertBrowserCompatibility({ protocolVersion, product });
     const port = new BrowserControlPort({ transport: new UserBrowserTransport(connection), policy });
     return new NodeBrowserControlBroker({ connection, port, compatibility, timeoutMs, viewport,
-      targets: userBrowserTargets(connection) });
+      targets: userBrowserTargets(connection), holdOutside });
   } catch (error) {
     connection.close();
     throw error;

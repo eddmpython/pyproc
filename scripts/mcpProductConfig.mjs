@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
-import { parseBrowserControlConfig } from "./browserControl/mcpBrowserControl.js";
+import { assertPermissionRevisionHost, parseBrowserControlConfig } from "./browserControl/mcpBrowserControl.js";
 import { assertBrowserRequestHost } from "./browserControl/requestGuard.mjs";
 import { normalizeBrowserViewport } from "./browserControl/browserViewport.js";
 import { normalizeTrustedCertificates, trustedCertificateEnvironment } from "./browserControl/trustedCertificates.js";
@@ -16,7 +16,7 @@ const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
-  "recording", "trustedCertificates", "requests", "userBrowser",
+  "recording", "trustedCertificates", "requests", "userBrowser", "permissionRevision",
 ]);
 const RECORDING_KEYS = new Set([
   "mode", "file", "overwrite", "recordingId", "finalSha256", "startCursor", "prefixSha256",
@@ -40,6 +40,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_AUTOMATION_PROVIDER", "PYPROC_USER_BROWSER",
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
   "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_REQUESTS", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
+  "PYPROC_BROWSER_PERMISSION_REVISION",
   "PYPROC_BROWSER_FILE_ROOTS", "PYPROC_BROWSER_EXTERNAL_EFFECTS", "PYPROC_BROWSER_PURPOSE",
   "PYPROC_BROWSER_ARTIFACT_MAX_BYTES", "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",
   "PYPROC_BROWSER_ARTIFACT_MAX_COUNT", "PYPROC_BROWSER_ARTIFACT_INLINE_BYTES",
@@ -245,6 +246,10 @@ function normalizedBrowser(input = { enabled: false }) {
   const requests = browser.requests === undefined ? "any" : browser.requests;
   const artifacts = normalizedArtifacts(browser.artifacts);
   const recording = normalizedRecording(browser.recording, provider, artifacts);
+  // Live permission revision is for the product's own controller (a Control client), and only when the manifest says
+  // so; a recorded session keeps the permission it started with.
+  const permissionRevision = browser.permissionRevision === undefined ? "off" : browser.permissionRevision;
+  assertPermissionRevisionHost({ permissionRevision, providerKind: provider, recordingMode: recording?.mode || "" });
   const allowedOrigins = stringArray(browser.allowedOrigins, "browser.allowedOrigins", { allowEmpty: false });
   if (provider === "replay" && browser.trustedCertificates !== undefined) {
     throw new TypeError("replay provider does not accept browser.trustedCertificates");
@@ -259,6 +264,7 @@ function normalizedBrowser(input = { enabled: false }) {
     gpu: optionalBoolean(browser.gpu, "browser.gpu"),
     allowedOrigins,
     requests,
+    permissionRevision,
     maxRisk: browser.maxRisk || "read",
     actions: stringArray(browser.actions, "browser.actions", { allowEmpty: false }),
     methods: browser.methods === undefined ? [] : stringArray(browser.methods, "browser.methods"),
@@ -516,6 +522,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   env.PYPROC_BROWSER_ALLOWED_ORIGINS = browser.allowedOrigins.join(",");
   env.PYPROC_BROWSER_MAX_RISK = browser.maxRisk;
   if (browser.requests === "safe") env.PYPROC_BROWSER_REQUESTS = "safe";
+  if (browser.permissionRevision === "controller") env.PYPROC_BROWSER_PERMISSION_REVISION = "controller";
   env.PYPROC_BROWSER_ACTIONS = browser.actions.join(",");
   env.PYPROC_BROWSER_METHODS = browser.methods.join(",");
   env.PYPROC_BROWSER_FILE_ROOTS = browser.fileRoots.join(delimiter);

@@ -71,6 +71,25 @@ export async function assertExecutionMemoryContract() {
       "existing import root의 canonical path가 보존되지 않았다");
     assert((await errorOf(() => handlerProduct.allowedImportPath(join(targetRoot, "missing"), "missing")))?.code
       === "EXECUTION_MEMORY_PATH", "존재하지 않는 import path가 권한 경계를 통과했다");
+    // A live permission revision reaches every later revision, including checkpoints made without naming it (the
+    // effect coordinator's), and never rewrites the revisions made before it.
+    const revisionRoot = await mkdtemp(join(tmpdir(), "pyproc-execution-memory-revision-"));
+    try {
+      const revising = await createExecutionMemoryHandlers({ root: revisionRoot, pageBridge: null,
+        permissionManifest: { pythonNetwork: "denied", browser: { targetOrigins: ["http://a.test"] } } });
+      const before = await revising.handlers["memory.create"]({ executionSessionId: "session:revision",
+        project: project() }, {});
+      const revised = await revising.revisePermissions({ pythonNetwork: "denied",
+        browser: { targetOrigins: ["http://a.test", "http://b.test"] }, reference: "approval:contract" });
+      const after = await revising.registry.checkpointSession("session:revision", before.contentSha256,
+        { work: before.work });
+      assert(before.permissions.manifestSha256 !== revised.manifestSha256
+        && after.permissions.manifestSha256 === revised.manifestSha256
+        && (await revising.registry.openSession("session:revision")).parents[0] === before.contentSha256,
+      "권한 개정 뒤의 revision이 개정된 권한을 싣지 않거나 이전 revision이 바뀌었다");
+    } finally {
+      await rm(revisionRoot, { recursive: true, force: true });
+    }
     const source = await ExecutionMemoryRegistry.open({ root: sourceRoot, secretValues: ["fixture-secret"] });
     assert((await errorOf(async () => source.artifacts.captureMachineImage({
       bytes: await machineImage("fixture-secret"), machineId: "machine:secret", lifecycle: "portable",

@@ -110,8 +110,11 @@ function parsePurpose(value) {
 }
 
 function parseOrigins(value) {
+  return exactOrigins(csv(value));
+}
+
+function exactOrigins(entries) {
   const origins = [];
-  const entries = csv(value);
   if (entries.includes(ANY_TARGET_ORIGIN)) {
     if (entries.length !== 1) throw new Error("browser target origin * must be the only origin");
     return [ANY_TARGET_ORIGIN];
@@ -129,7 +132,10 @@ function parseOrigins(value) {
 }
 
 function parseFileRoots(value) {
-  const roots = String(value || "").split(delimiter).map((entry) => entry.trim()).filter(Boolean);
+  return verifiedFileRoots(String(value || "").split(delimiter).map((entry) => entry.trim()).filter(Boolean));
+}
+
+function verifiedFileRoots(roots) {
   const verified = roots.map((root) => {
     if (!isAbsolute(root)) throw new Error(`browser file root must be absolute: ${root}`);
     let present;
@@ -196,9 +202,14 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   const targetOrigins = Object.freeze(parseOrigins(env.PYPROC_BROWSER_ALLOWED_ORIGINS));
   const requests = env.PYPROC_BROWSER_REQUESTS || "any";
   assertBrowserRequestScope({ requests, targetOrigins });
+  const permissionRevision = env.PYPROC_BROWSER_PERMISSION_REVISION || "off";
+  if (!["off", "controller"].includes(permissionRevision)) {
+    throw new Error(`invalid PYPROC_BROWSER_PERMISSION_REVISION: ${permissionRevision}`);
+  }
   return Object.freeze({
     targetOrigins,
     requests,
+    permissionRevision,
     trustedCertificates: parseTrustedCertificateEnvironment(env.PYPROC_BROWSER_TRUSTED_CERTIFICATES, targetOrigins),
     rawMethods: Object.freeze(rawMethods),
     actions: Object.freeze(actions),
@@ -214,7 +225,115 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   });
 }
 
-function browserBaseTools() {
+function stringList(value, label) {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+    throw permissionError(`permission revision ${label} must be a list of strings`);
+  }
+  return unique(value.map((entry) => entry.trim()).filter(Boolean));
+}
+
+/** Where live permission revision may run: a controller host of the nativeCdp or userBrowser provider that is not
+ * recording (a recording replays against the permission it started with). The manifest and the product check this. */
+export function assertPermissionRevisionHost({ permissionRevision = "off", providerKind, recordingMode = "" }) {
+  if (!["off", "controller"].includes(permissionRevision)) {
+    throw new TypeError("browser.permissionRevision must be off or controller");
+  }
+  if (permissionRevision !== "controller") return;
+  if (!["nativeCdp", "userBrowser"].includes(providerKind)) {
+    throw new TypeError("browser.permissionRevision controller needs the nativeCdp or userBrowser provider");
+  }
+  if (recordingMode === "record") {
+    throw new TypeError("a recorded browser session keeps its permission; browser.permissionRevision must be off");
+  }
+}
+
+const REVISION_FIELDS = new Set(["allowedOrigins", "actions", "rawMethods", "maxRisk", "fileRoots", "reference"]);
+
+/**
+ * Revise a running browser permission. Origins change freely; actions, raw methods, maxRisk, and file roots narrow, or
+ * come back up to what the host started with (its tool surface was built from those). Anything that grows authority
+ * needs the caller's `reference` to the approval behind it, which pyproc records but does not interpret. Omitted
+ * fields keep their current value. Returns the revised config, whether it widened, and the reference.
+ */
+export function reviseBrowserControlConfig(start, current, input = {}) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw permissionError("permission revision must be an object");
+  for (const key of Object.keys(input)) {
+    if (!REVISION_FIELDS.has(key)) throw permissionError(`unknown permission revision field: ${key}`);
+  }
+  if (input.reference !== undefined && typeof input.reference !== "string") {
+    throw permissionError("permission revision reference must be a string");
+  }
+  const reference = (input.reference || "").trim();
+  if (reference.length > 200 || /[\u0000-\u001f\u007f]/.test(reference)) {
+    throw permissionError("permission revision reference must be printable text up to 200 characters");
+  }
+  const bounded = (values, ceiling, label) => {
+    const outside = values.filter((value) => !ceiling.includes(value));
+    if (outside.length) throw permissionError(`${label} outside what the host started with: ${outside.join(", ")}`);
+    return values;
+  };
+  let targetOrigins;
+  try {
+    targetOrigins = input.allowedOrigins === undefined ? current.targetOrigins
+      : exactOrigins(stringList(input.allowedOrigins, "allowedOrigins"));
+    if (targetOrigins.length < 1) throw permissionError("allowedOrigins must name at least one origin");
+    // Any origin comes back only to a host that started with it (it passed the read-only host rules then).
+    if (targetOrigins.includes(ANY_TARGET_ORIGIN) && !start.targetOrigins.includes(ANY_TARGET_ORIGIN)) {
+      throw permissionError("allowedOrigins * is only for a host that started with it");
+    }
+    assertBrowserRequestScope({ requests: current.requests, targetOrigins });
+  } catch (error) {
+    throw error instanceof BrowserControlError ? error : permissionError(error.message);
+  }
+  if (input.maxRisk !== undefined && typeof input.maxRisk !== "string") {
+    throw permissionError("permission revision maxRisk must be a string");
+  }
+  const maxRisk = input.maxRisk === undefined ? current.maxRisk : input.maxRisk;
+  if (!Object.hasOwn(BROWSER_CONTROL_RISKS, maxRisk) || BROWSER_CONTROL_RISKS[maxRisk] > BROWSER_CONTROL_RISKS[start.maxRisk]) {
+    throw permissionError(`maxRisk must be read, mutate, or externalEffect, and not above ${start.maxRisk}`);
+  }
+  const actions = input.actions === undefined ? current.actions
+    : bounded(stringList(input.actions, "actions"), start.actions, "actions");
+  const rawMethods = input.rawMethods === undefined ? current.rawMethods
+    : bounded(stringList(input.rawMethods, "rawMethods"), start.rawMethods, "rawMethods");
+  let fileRoots;
+  let actionMethods;
+  try {
+    fileRoots = input.fileRoots === undefined ? current.fileRoots
+      : bounded(verifiedFileRoots(stringList(input.fileRoots, "fileRoots")), start.fileRoots, "fileRoots");
+    assertBrowserAutomationRisk(actions, maxRisk);
+    validateMethods(rawMethods, maxRisk, "rawMethods");
+    actionMethods = unique(actions.flatMap((name) => BROWSER_AUTOMATION_ACTIONS[name].methods));
+    validateMethods(actionMethods, maxRisk, "actions required method");
+  } catch (error) {
+    throw error instanceof BrowserControlError ? error : permissionError(error.message);
+  }
+  if ((actions.includes("upload") || rawMethods.includes("DOM.setFileInputFiles")) && fileRoots.length < 1) {
+    throw permissionError("browser file upload requires fileRoots");
+  }
+  const grew = (next, now) => next.some((value) => !now.includes(value));
+  // Every origin is already inside "*": leaving it only narrows.
+  const originsGrew = !current.targetOrigins.includes(ANY_TARGET_ORIGIN) && grew(targetOrigins, current.targetOrigins);
+  const widened = originsGrew || grew(actions, current.actions)
+    || grew(rawMethods, current.rawMethods) || grew(fileRoots, current.fileRoots)
+    || BROWSER_CONTROL_RISKS[maxRisk] > BROWSER_CONTROL_RISKS[current.maxRisk];
+  if (widened && !reference) {
+    throw permissionError("widening a browser permission needs the caller's reference to the approval behind it");
+  }
+  const config = Object.freeze({
+    ...current,
+    targetOrigins: Object.freeze([...targetOrigins]),
+    rawMethods: Object.freeze([...rawMethods]),
+    actions: Object.freeze([...actions]),
+    methods: Object.freeze(unique([...rawMethods, ...actionMethods])),
+    events: Object.freeze(unique(actions.flatMap((name) => BROWSER_AUTOMATION_ACTIONS[name].events))),
+    fileRoots: Object.freeze([...fileRoots]),
+    maxRisk,
+  });
+  return Object.freeze({ config, widened, reference });
+}
+
+function browserBaseTools(config) {
   return [
     {
       name: "browserInspect",
@@ -280,6 +399,26 @@ function browserBaseTools() {
         additionalProperties: false,
       },
     },
+    // Only a host whose manifest opts in (browser.permissionRevision controller) offers it, and never over MCP.
+    ...(config.permissionRevision === "controller" ? [{
+      name: "browserRevisePermission",
+      description: "Replace the running browser permission without restarting: allowed origins change freely; "
+        + "actions, raw methods, maxRisk, and file roots narrow or come back up to what the host started with. "
+        + "Anything that grows authority needs the caller's reference to the approval behind it. A surface held "
+        + "outside the permission continues once the permission covers it.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          allowedOrigins: { type: "array", items: { type: "string", minLength: 1 }, maxItems: 64 },
+          actions: { type: "array", items: { type: "string", minLength: 1 }, maxItems: 64 },
+          rawMethods: { type: "array", items: { type: "string", minLength: 1 }, maxItems: 256 },
+          maxRisk: { type: "string", enum: ["read", "mutate", "externalEffect"] },
+          fileRoots: { type: "array", items: { type: "string", minLength: 1 }, maxItems: 16 },
+          reference: { type: "string", maxLength: 200 },
+        },
+        additionalProperties: false,
+      },
+    }] : []),
     {
       name: "browserDetach",
       description: "Detach a broker-scoped browser session and invalidate its opaque locators.",
@@ -294,7 +433,7 @@ function browserBaseTools() {
 }
 
 export function createBrowserControlTools(config) {
-  const tools = browserBaseTools();
+  const tools = browserBaseTools(config);
   if (config.actions.includes("snapshot")) {
     tools.push({
       name: "browserObserve",
@@ -389,6 +528,10 @@ export class McpBrowserControl {
     if (typeof brokerFactory !== "function") throw new TypeError("browser MCP brokerFactory is required");
     if (typeof auditWriter !== "function") throw new TypeError("browser MCP auditWriter is required");
     this.config = config;
+    // The permission the host started with: the ceiling a revision may come back up to, except for origins.
+    this._startConfig = config;
+    this._revisionTail = Promise.resolve();
+    this._permissionRecorder = null;
     this.tools = createBrowserControlTools(config);
     this._toolNames = new Set(this.tools.map((tool) => tool.name));
     this._rawMethods = new Set(config.rawMethods);
@@ -462,6 +605,12 @@ export class McpBrowserControl {
       return output;
     }
     if (tool === "browserAttach") return broker.attach(args.targetRef);
+    if (tool === "browserRevisePermission") {
+      // Revisions run one at a time, so the record of each is made in the order they take effect.
+      const turn = this._revisionTail.then(() => this._revise(args, broker, automation));
+      this._revisionTail = turn.catch(() => {});
+      return turn;
+    }
     if (tool === "browserCommand") {
       return broker.command(args.sessionRef, {
         method: args.method,
@@ -497,10 +646,37 @@ export class McpBrowserControl {
     if (tool === "browserArtifactDelete") return artifactStore.delete(args.artifactRef);
     if (tool === "browserDetach") {
       automation.dropSession(args.sessionRef);
-      await broker.detach(args.sessionRef);
-      return Object.freeze({ detached: true });
+      const closedTarget = await broker.detach(args.sessionRef);
+      if (closedTarget) automation.dropTarget(closedTarget);
+      return Object.freeze({ detached: true, ...(closedTarget ? { closedTarget } : {}) });
     }
     throw new Error(`unhandled browser tool: ${tool}`);
+  }
+
+  /** Record every applied permission revision (Execution Memory): the recorder runs after a revision is validated
+   * and before it takes effect, so a revision it refuses changes nothing. Registered once, by the product. */
+  onPermissionRevision(recorder) {
+    if (typeof recorder !== "function" || this._permissionRecorder) {
+      throw new TypeError("a single permission revision recorder function is required");
+    }
+    this._permissionRecorder = recorder;
+  }
+
+  async _revise(args, broker, automation) {
+    const { config, widened, reference } = reviseBrowserControlConfig(this._startConfig, this.config, args);
+    // Everything that can refuse runs first: the new policy is built and the revision recorded before either swap.
+    const policy = broker.permissionPolicy({ targetOrigins: config.targetOrigins, methods: config.methods,
+      events: config.events, fileRoots: config.fileRoots, maxRisk: config.maxRisk });
+    if (this._permissionRecorder) await this._permissionRecorder(config, reference || null);
+    // The policy and the actions swap in the same turn, so no request sees one without the other.
+    const permission = await broker.port.revisePolicy(policy);
+    automation.reviseActions(config.actions);
+    this.config = config;
+    this._rawMethods = new Set(config.rawMethods);
+    this._audit({ kind: "permissionRevision", state: "applied", widened, reference: reference || null,
+      targetOrigins: config.targetOrigins, actions: config.actions, maxRisk: config.maxRisk });
+    return Object.freeze({ permission, actions: config.actions, rawMethods: config.rawMethods, widened,
+      reference: reference || null, heldSurfaces: broker.port.inspect().heldSurfaces });
   }
 
   async close() {
@@ -521,6 +697,8 @@ export class McpBrowserControl {
         fileRoots: this.config.fileRoots,
         downloadRoot: downloadDir,
         maxRisk: this.config.maxRisk,
+        // Only a host whose permission can widen keeps a new tab the site sent elsewhere; others close it.
+        holdOutside: this.config.permissionRevision === "controller",
         timeoutMs: this.config.timeoutMs,
         viewport: this.config.viewport,
         requests: this.config.requests,

@@ -204,7 +204,8 @@ with, and the browser opens no DevTools port another local process could join. M
 session, locator, and artifact references. It receives no CDP endpoint, backend node ID, download staging
 name, or filesystem path.
 
-The ten opt-in browser tools are:
+The eleven opt-in browser tools are (a Control client of a host whose manifest sets
+`browser.permissionRevision: "controller"` also gets `browserRevisePermission`; MCP never does):
 
 | Tool | Meaning |
 |---|---|
@@ -212,6 +213,7 @@ The ten opt-in browser tools are:
 | `browserListTargets` | Allowed exact-origin targets as opaque `targetRef` values |
 | `browserOpen` | Instrument an empty target, apply the viewport, navigate to an allowed URL, and return at commit by default |
 | `browserAttach` | Create a versioned broker-scoped session |
+| `browserClose` | Close a target this broker opened and invalidate its sessions |
 | `browserObserve` | Compact semantic snapshot with optional screenshot, console, and network data |
 | `browserAct` | Run an ordered pipeline of up to 16 high-level actions |
 | `browserCommand` | Raw CDP escape hatch under its own exact method allowlist |
@@ -529,7 +531,8 @@ Example screenshot action:
 |---|---|
 | `pyproc-mcp: ...` during `--check` | Fix the manifest, engine directory, browser executable, or permission combination before registration |
 | `BROWSER_CONTROL_PERMISSION_DENIED` before send | Check exact origins, action and method lists, fixed risk, acknowledgement, purpose, and file roots |
-| `BROWSER_CONTROL_PERMISSION_DENIED` with `outcome: applied` | A popup or navigation reached a denied final origin after send. Do not retry automatically |
+| `BROWSER_CONTROL_PERMISSION_DENIED` with `outcome: applied` | A popup reached a denied final origin after send; it was closed and the refusal names the origin and path. Do not retry automatically |
+| `BROWSER_CONTROL_SURFACE_HELD` | The tab reached an origin outside the permission (a redirect, a link, a new tab the site sent elsewhere). It stays held with its `targetRef`, `origin`, and `path`; widen the permission (`automation.permission.revise`, when the manifest enables it) to go on with the same tab, or close it. |
 | `BROWSER_AUTOMATION_ACTIONABILITY_TIMEOUT` | The target never became unique, visible, stable, enabled, editable, or hittable within the bound |
 | `BROWSER_AUTOMATION_SCREENSHOT_BOUNDS` | Read `details.measured` and `details.limits`. Request a smaller clip, or explicitly approve a viewport-scroll workflow because scrolling may trigger effects |
 | `BROWSER_AUTOMATION_ARTIFACT_QUOTA` | Delete artifacts or wait for TTL reap before capturing more |

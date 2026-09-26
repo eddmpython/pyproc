@@ -214,7 +214,7 @@ try {
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
   const tools = (await request("tools/list")).result.tools.map((tool) => tool.name);
   check("설치 제품이 Python, browser, Execution Memory, Rehearse-Commit operation을 함께 제공",
-    tools.length === 36 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete")
+    tools.length === 36 && tools.includes("browserArtifactRead") && !tools.includes("browserRevisePermission") && tools.includes("browserArtifactDelete")
       && tools.includes("browserClose")
       && tools.includes("machineImageExport") && tools.includes("memoryCreate") && tools.includes("memoryImport")
       && tools.includes("eyesAudit") && tools.includes("eyesVerify") && tools.includes("eyesReplay")

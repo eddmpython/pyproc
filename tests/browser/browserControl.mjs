@@ -163,6 +163,7 @@ try {
   const listedTools = await request("tools/list", {});
   const names = listedTools.result.tools.map((tool) => tool.name).sort();
   check("opt-in에서 Python 4종, browser 11종, verification 3종, skill 2종", names.length === 20 && names.includes("pythonRun")
+    && !names.includes("browserRevisePermission")
     && names.includes("browserCommand") && names.includes("browserObserve") && names.includes("browserAct")
     && names.includes("browserClose") && names.includes("browserArtifactRead")
     && names.includes("browserArtifactDelete") && names.includes("eyesAudit")
@@ -948,14 +949,16 @@ try {
     }],
   });
   const redirectedNavigate = toolText(redirectedNavigateResponse);
-  check("허용 URL의 권한 밖 redirect는 post-send applied 실패",
+  check("허용 URL의 권한 밖 redirect는 도착 origin을 알리는 post-send applied 보류",
     redirectedNavigateResponse.result.isError === true
-      && redirectedNavigate.code === "BROWSER_CONTROL_PERMISSION_DENIED" && redirectedNavigate.outcome === "applied"
+      && redirectedNavigate.code === "BROWSER_CONTROL_SURFACE_HELD" && redirectedNavigate.outcome === "applied"
+      && redirectedNavigate.origin === deniedOrigin
       && redirectedNavigate.trace?.steps?.[0]?.commands?.[0]?.method === "Page.navigate",
-  redirectedNavigate.code);
+  `${redirectedNavigate.code} ${redirectedNavigate.origin}`);
   const originSwap = await browserCommand(sessionRef, "DOM.getDocument", {}, "read");
   const originPayload = toolText(originSwap);
-  check("redirect 뒤 session은 command 직전까지 권한 미검증 상태", originSwap.result.isError === true && originPayload.code === "BROWSER_CONTROL_PERMISSION_DENIED", originPayload.code);
+  check("redirect 뒤 session은 권한이 넓어질 때까지 보류", originSwap.result.isError === true
+    && originPayload.code === "BROWSER_CONTROL_SURFACE_HELD" && originPayload.outcome === "notSent", originPayload.code);
 
   const detached = toolText(await callTool("browserDetach", { sessionRef }));
   check("browserDetach 성공", detached.detached === true);

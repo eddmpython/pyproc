@@ -357,6 +357,9 @@ export class BrowserAutomation {
       command: (sessionRef, method, params, commandResults, signal) => this._command(sessionRef, method, params, commandResults, signal),
       artifactStore,
     }) : null;
+    // Visual probes run only while screenshots are allowed; a permission revision turns them off and on.
+    this._visualProbe = this._screenshot
+      ? (sessionRef, entity, visual, context) => this._captureVisualProbe(sessionRef, entity, visual, context) : null;
     const visualProbeEnabled = !!this._screenshot && this._allowedActions.has("screenshot");
     this._observation = new BrowserObservation({
       port,
@@ -377,8 +380,7 @@ export class BrowserAutomation {
       locatorReset: (sessionRef) => this._clearSessionLocators(sessionKey(sessionRef)),
       locatorIssuer: (sessionRef, contextEpoch, locatorData) =>
         this._issueOpaqueLocator(sessionRef, contextEpoch, locatorData.backendNodeId),
-      visualProbe: visualProbeEnabled ? (sessionRef, entity, visual, context) =>
-        this._captureVisualProbe(sessionRef, entity, visual, context) : null,
+      visualProbe: visualProbeEnabled ? this._visualProbe : null,
       visualRelease: visualProbeEnabled ? (probe) => artifactStore.delete(probe.artifact.artifactRef) : null,
       providerKind,
       now,
@@ -417,6 +419,9 @@ export class BrowserAutomation {
       const traceToken = trace.begin({ index, actionId, kind: action.kind, risk: BROWSER_AUTOMATION_ACTIONS[action.kind].risk });
       const actionConvergence = action.actionContext ? new ActionConvergence({ signal, now: this._now }) : null;
       try {
+        // A permission revision may have removed this action (or the snapshot its verify needs) while earlier ones ran.
+        this._authorizeAction(action.kind);
+        if (action.verify) this._authorizeAction("snapshot");
         const perform = async (candidate) => {
           const actionSignal = actionConvergence?.signal || signal;
           if (!candidate.verify) return this._execute(
@@ -500,6 +505,16 @@ export class BrowserAutomation {
       }
     }
     return Object.freeze({ runId, state: "completed", actions: Object.freeze(completed), trace: trace.finish("completed") });
+  }
+
+  /** Replace the allowed actions of a running host (the caller keeps them within what the host started with). */
+  reviseActions(actions) {
+    const next = new Set(actions);
+    for (const name of next) {
+      if (!Object.hasOwn(BROWSER_AUTOMATION_ACTIONS, name)) throw new TypeError(`unknown browser action: ${name}`);
+    }
+    this._allowedActions = next;
+    this._perception.visualProbe = next.has("screenshot") ? this._visualProbe : null;
   }
 
   dropSession(sessionRef) {

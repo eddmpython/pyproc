@@ -30,8 +30,17 @@ export class MotorTaskSession {
     let targetRef = config.targetRef || null;
     let ownedTarget = false;
     if (hasUrl) {
-      const opened = await client.openTarget(config.url, { expectedRisk: config.expectedRisk || "externalEffect",
-        waitUntil: config.waitUntil || "commit", ...requestOptions });
+      let opened;
+      try {
+        opened = await client.openTarget(config.url, { expectedRisk: config.expectedRisk || "externalEffect",
+          waitUntil: config.waitUntil || "commit", ...requestOptions });
+      } catch (error) {
+        // The site sent the new tab outside the permission: the task cannot start there, so its tab is closed.
+        if (error?.code === "BROWSER_CONTROL_SURFACE_HELD" && error.details?.targetRef) {
+          await client.closeTarget(error.details.targetRef, requestOptions).catch(() => {});
+        }
+        throw error;
+      }
       targetRef = opened.output.targetRef;
       ownedTarget = true;
     }

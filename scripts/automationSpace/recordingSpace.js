@@ -74,12 +74,15 @@ function recordingCopy(payload, recording) {
     artifactRefs: Object.freeze([...new Set(artifactRefs)]) });
 }
 
+// A recording replays against the permission it started with, so its permission never changes live.
+const NOT_RECORDED = "automation.permission.revise";
+
 function providerDescriptor(provider) {
   const config = provider.config || provider.control?.config || {};
   return Object.freeze({
     spaceId: provider.spaceId,
     providerKind: provider.providerKind,
-    operations: Object.freeze([...provider.operations]),
+    operations: Object.freeze(provider.operations.filter((operation) => operation !== NOT_RECORDED)),
     capabilities: Object.freeze([...(provider.capabilities || [])]),
     restoreBoundary: "externalEffectsRemain",
     policy: Object.freeze({
@@ -111,7 +114,7 @@ export class RecordingSpace {
     this.file = file;
     this.spaceId = provider.spaceId;
     this.providerKind = provider.providerKind;
-    this.operations = Object.freeze([...provider.operations]);
+    this.operations = Object.freeze(provider.operations.filter((operation) => operation !== NOT_RECORDED));
     this.capabilities = Object.freeze([...(provider.capabilities || [])]);
     this.replayBoundary = "deterministicRecording";
     this.linearizeInvocations = true;

@@ -135,6 +135,7 @@ export class ExecutionMemoryRegistry {
   }
 
   constructor({ store, secretValues = [], nowFactory = () => new Date().toISOString() }) {
+    this._revisedPermissions = null;
     this.store = store;
     this.secretValues = [...secretValues].filter(Boolean);
     this.nowFactory = nowFactory;
@@ -174,9 +175,14 @@ export class ExecutionMemoryRegistry {
       work: work || current.work,
       browser: browser === undefined ? current.browser : browser,
       evidence: evidence === undefined ? current.evidence : evidence,
-      permissions: permissions || current.permissions,
+      permissions: permissions || this._revisedPermissions || current.permissions,
       provenance: { createdAt: this.nowFactory(), source },
     });
+  }
+
+  /** A live permission revision of this host: every later revision of any session carries it. */
+  revisePermissions(permissions) {
+    this._revisedPermissions = permissions;
   }
 
   async completeSession(executionSessionId, expectedRevisionSha256, { machine, evidence, source = "control" }) {

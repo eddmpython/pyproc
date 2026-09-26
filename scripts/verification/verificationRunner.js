@@ -266,6 +266,13 @@ export class VerificationRunner {
     } catch (error) {
       if (signal?.aborted) throw error;
       reason = error?.code || "scenarioFailure";
+      // A page the site sent outside the permission as it opened is held with no session: close it here.
+      const heldRef = !sessionRef && error?.code === "BROWSER_CONTROL_SURFACE_HELD" ? error.details?.targetRef : null;
+      if (heldRef) {
+        try {
+          await this.automation.invoke("automation.target.close", { targetRef: heldRef, expectedRisk: "externalEffect" }, {});
+        } catch { cleanup = "failed"; }
+      }
       if (["outcomeUnknown", "applied"].includes(error?.outcome)) actions.push(Object.freeze({
         stepId: "unknown", terminal: error.outcome, error: error?.code || "SCENARIO_FAILED" }));
     } finally {

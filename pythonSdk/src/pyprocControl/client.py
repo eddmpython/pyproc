@@ -454,6 +454,10 @@ class PyProcClient:
     def detachSession(self, sessionRef: Mapping[str, Any], *, timeout: float | None = None) -> ControlResult:
         return self.request("automation.session.detach", {"sessionRef": sessionRef}, timeout=timeout)
 
+    def revisePermission(self, revision: Mapping[str, Any], *, timeout: float | None = None) -> ControlResult:
+        """Replace the running browser permission; widening needs ``reference`` (the approval behind it)."""
+        return self.request("automation.permission.revise", dict(revision), timeout=timeout)
+
     def readArtifact(self, artifactRef: str, *, offset: int | None = None, maxBytes: int | None = None,
                      timeout: float | None = None) -> ControlResult:
         input: dict[str, Any] = {"artifactRef": artifactRef}

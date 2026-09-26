@@ -15,6 +15,7 @@ export const BROWSER_CONTROL_ERROR_CODES = Object.freeze({
   permissionDenied: "BROWSER_CONTROL_PERMISSION_DENIED",
   sessionDetached: "BROWSER_CONTROL_SESSION_DETACHED",
   staleBroker: "BROWSER_CONTROL_STALE_BROKER",
+  surfaceHeld: "BROWSER_CONTROL_SURFACE_HELD",
   targetUnavailable: "BROWSER_CONTROL_TARGET_UNAVAILABLE",
   targetCertificateUntrusted: "BROWSER_CONTROL_TARGET_CERTIFICATE_UNTRUSTED",
 });
@@ -44,6 +45,18 @@ function validateTransport(transport) {
     if (typeof transport[method] !== "function") throw new TypeError(`browser control transport is missing ${method}()`);
   }
   return transport;
+}
+
+// Where a surface outside the permission went: its origin and path, never its query or fragment (they may carry
+// tokens). A surface without an HTTP(S) origin reports none.
+export function heldPlace(url) {
+  try {
+    const parsed = new URL(String(url || ""));
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return Object.freeze({ origin: "", path: "" });
+    return Object.freeze({ origin: parsed.origin, path: parsed.pathname });
+  } catch {
+    return Object.freeze({ origin: "", path: "" });
+  }
 }
 
 function copyTarget(target) {
@@ -96,11 +109,15 @@ export class BrowserControlPort {
     if (!Number.isInteger(brokerEpoch) || brokerEpoch < 1) throw new TypeError("brokerEpoch must be a positive integer");
     this._brokerEpoch = brokerEpoch;
     this._targets = new Map();
+    // Task targets that arrived outside the permission and are kept, held, until it is widened or they are closed.
+    this._heldTargets = new Map();
     this._sessions = new Map();
     this._popupCaptures = new Map();
     this._requestSeq = 0;
     this._eventSeq = 0;
     this._closed = false;
+    // Whether a held surface's place may be told; a broker over the user's own browser narrows it to its own tabs.
+    this.revealsPlace = () => true;
   }
 
   async listTargets() {
@@ -118,6 +135,11 @@ export class BrowserControlPort {
     this._requireOpen();
     const raw = (await this._transport.listTargets())
       .find((target) => String(target?.id || "") === String(targetId));
+    // A permission narrowed while the target opened: it is held, not lost.
+    if (raw && raw.url && !this.policy.allowsTarget(copyTarget(raw))) {
+      const targetRef = this.holdTarget(raw);
+      throw this._heldError(targetRef, raw);
+    }
     const target = raw ? this._rememberVisibleTarget(raw) : null;
     if (!target) throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
       "created browser target is unavailable or outside permission");
@@ -130,24 +152,30 @@ export class BrowserControlPort {
     if (!remembered) throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable, `unknown target reference: ${targetRef}`);
     const current = (await this._transport.listTargets()).map(copyTarget).find((target) => target.id === remembered.id);
     if (!current) throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable, `target is unavailable: ${targetRef}`);
+    if (this._heldTargets.has(String(targetRef))) {
+      // A held target stays open for the caller; only a widened permission lets anything attach to it.
+      if (!this.policy.allowsTarget(current.url ? current : remembered)) throw this._heldError(String(targetRef), current);
+      this._heldTargets.delete(String(targetRef));
+    }
     // Chromium은 새 target 또는 이미 attach된 target의 browser-level URL을 잠깐 빈 문자열로
     // 내릴 수 있다. 마지막 허용 관찰 없이 blank target에 붙지는 않되, attach 직후에는
-    // session-level frame URL로 반드시 다시 검사하고 실패하면 session을 내준다.
-    try { this._authorizeTarget(current.url ? current : remembered); }
-    catch (error) {
-      await Promise.allSettled([this._transport.closeTarget(current.id)]);
-      throw error;
+    // session-level frame URL로 반드시 다시 검사한다. 권한 밖이면 target을 닫지 않고 보류한다.
+    if (!this.policy.allowsTarget(current.url ? current : remembered)) {
+      this._holdUnattached(String(targetRef), (current.url ? current : remembered).url);
+      throw this._heldError(String(targetRef), current.url ? current : remembered);
     }
     let transportSession = null;
     let described = null;
     try {
       transportSession = await this._transport.attach(current.id);
       described = copyTarget(await this._transport.describe(transportSession));
-      this._authorizeTarget(described);
       this._targets.set(String(targetRef), described);
+      if (!this.policy.allowsTarget(described)) {
+        this._holdUnattached(String(targetRef), described.url);
+        throw this._heldError(String(targetRef), described);
+      }
     } catch (error) {
       if (transportSession) await Promise.allSettled([this._transport.detach(transportSession)]);
-      await Promise.allSettled([this._transport.closeTarget(current.id)]);
       if (error instanceof BrowserControlError) throw error;
       throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
         `browser target is unavailable: ${targetRef}`, { cause: error });
@@ -162,6 +190,7 @@ export class BrowserControlPort {
       state: "attached",
       authorizationState: "verified",
       authorizedTarget: described,
+      lastTarget: described,
       contextEpoch: 0,
       unsubscribe: null,
     };
@@ -180,7 +209,61 @@ export class BrowserControlPort {
     await Promise.allSettled(attached.map((session) => this.detach(this._sessionRef(session))));
     await this._transport.closeTarget(target.id);
     this._targets.delete(ref);
+    this._heldTargets.delete(ref);
     return Object.freeze({ closed: true, targetRef: ref });
+  }
+
+  /** Keep a task target that arrived outside the permission, held: it is listed nowhere and nothing attaches to it
+   * until the permission is widened to its origin. Returns the reference the caller attaches with afterwards. */
+  holdTarget(raw) {
+    this._requireOpen();
+    const target = copyTarget(raw);
+    let targetRef = [...this._targets.entries()].find(([, value]) => value.id === target.id)?.[0];
+    if (!targetRef) targetRef = `target:${this._idFactory()}`;
+    this._targets.set(targetRef, target);
+    this._heldTargets.set(targetRef, heldPlace(target.url));
+    return targetRef;
+  }
+
+  /** Replace the permission in place. Every later check (listing, attach, each command of a running request) uses the
+   * new one; a surface outside it is held, and a held surface inside it continues. */
+  async revisePolicy(policy) {
+    this._requireOpen();
+    const next = policy instanceof BrowserControlPolicy ? policy : new BrowserControlPolicy(policy);
+    // Tabs that closed on their own are forgotten first, so none is reported held.
+    const live = new Set((await this._transport.listTargets()).map((target) => String(target?.id || "")));
+    for (const [targetRef, target] of [...this._targets]) {
+      if (live.has(target.id)) continue;
+      this._targets.delete(targetRef);
+      this._heldTargets.delete(targetRef);
+    }
+    this.policy = next;
+    // Every surface is judged against the new permission at once, where it was last seen: one now outside is held
+    // (its events stop and nothing attaches to it), one now inside is released and verified again at its next request.
+    const attachedRefs = new Set();
+    for (const session of this._sessions.values()) {
+      if (session.state !== "attached") continue;
+      attachedRefs.add(session.targetRef);
+      if (!this.policy.allowsTarget(session.lastTarget)) {
+        session.held = heldPlace(session.lastTarget?.url);
+        session.authorizationState = "held";
+        session.authorizedTarget = null;
+      } else if (session.held) {
+        session.held = null;
+        session.authorizationState = "unverified";
+      }
+    }
+    for (const [targetRef, target] of this._targets) {
+      if (this.policy.allowsTarget(target)) this._heldTargets.delete(targetRef);
+      else if (!attachedRefs.has(targetRef)) this._heldTargets.set(targetRef, heldPlace(target.url));
+    }
+    return this.policy.inspect();
+  }
+
+  /** Whether the session's surface is held outside the permission (its last check found it there). */
+  sessionHeld(sessionRef) {
+    const session = this._sessions.get(String(sessionRef?.sessionId || ""));
+    return Boolean(session?.held);
   }
 
   _rememberVisibleTarget(raw) {
@@ -242,8 +325,10 @@ export class BrowserControlPort {
           catch (error) {
             await Promise.allSettled([this._transport.closeTarget(target.id)]);
             await this._restorePopupOpener(session);
+            // A popup is not a surface the caller opened: it is closed, and the caller learns where it went.
             throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
-              "browser popup final URL is outside permission", { outcome: "applied", cause: error });
+              "browser popup final URL is outside permission", { outcome: "applied", cause: error,
+                details: heldPlace(target.url) });
           }
           if (stableId === target.id && stableUrl === target.url) stablePolls += 1;
           else {
@@ -305,7 +390,7 @@ export class BrowserControlPort {
         session.authorizationState = "verified";
         session.authorizedTarget = target;
       } catch (error) {
-        session.authorizationState = "unverified";
+        session.authorizationState = error?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld ? "held" : "unverified";
         throw error;
       }
     }
@@ -393,6 +478,9 @@ export class BrowserControlPort {
     for (const [captureRef, capture] of this._popupCaptures) {
       if (capture.sessionId === session.sessionId) this._popupCaptures.delete(captureRef);
     }
+    // A surface held when its session ends stays held where it was (the broker closes the ones it owns).
+    if (session.lastTarget) this._targets.set(session.targetRef, session.lastTarget);
+    if (session.held) this._heldTargets.set(session.targetRef, session.held);
     try { await this._transport.detach(session.transportSession); }
     finally { this._markDetached(session, "client_detach"); }
   }
@@ -420,6 +508,13 @@ export class BrowserControlPort {
       sessions: [...this._sessions.values()].filter((session) => session.state === "attached").length,
       retainedSessions: this._sessions.size,
       popupCaptures: this._popupCaptures.size,
+      heldSurfaces: Object.freeze([
+        ...[...this._heldTargets].map(([targetRef, place]) => Object.freeze({ targetRef,
+          ...(this.revealsPlace(targetRef) ? place : { origin: "", path: "" }) })),
+        ...[...this._sessions.values()].filter((session) => session.state === "attached" && session.held)
+          .map((session) => Object.freeze({ targetRef: session.targetRef, sessionId: session.sessionId,
+            ...(this.revealsPlace(session.targetRef) ? session.held : { origin: "", path: "" }) })),
+      ]),
       transport: this._transport.inspect?.() || null,
       policy: this.policy.inspect(),
     });
@@ -451,15 +546,37 @@ export class BrowserControlPort {
   }
 
   async _describe(session) {
+    let target;
     try {
-      const target = copyTarget(await this._transport.describe(session.transportSession));
-      this._authorizeTarget(target);
-      return target;
+      target = copyTarget(await this._transport.describe(session.transportSession));
     } catch (error) {
-      if (error instanceof BrowserControlError) throw error;
       throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
         `browser target is unavailable: ${session.targetRef}`, { cause: error });
     }
+    // A surface that arrived outside the permission is held, not dropped: the caller learns where it went and may
+    // widen the permission to go on with this same surface.
+    session.lastTarget = target;
+    if (!this.policy.allowsTarget(target)) {
+      session.held = heldPlace(target.url);
+      throw this._heldError(session.targetRef, target);
+    }
+    session.held = null;
+    return target;
+  }
+
+  // A target with a session attached is held through that session; only one without keeps its own entry.
+  _holdUnattached(targetRef, url) {
+    const attached = [...this._sessions.values()].some((session) => session.state === "attached"
+      && session.targetRef === targetRef);
+    if (!attached) this._heldTargets.set(targetRef, heldPlace(url));
+  }
+
+  _heldError(targetRef, target) {
+    // A surface the task did not open (a tab the user handed over in their own browser) is held without its place.
+    const place = this.revealsPlace(targetRef) ? heldPlace(target?.url) : Object.freeze({ origin: "", path: "" });
+    return this._error(BROWSER_CONTROL_ERROR_CODES.surfaceHeld,
+      "browser surface is outside permission and held until the permission is widened to it or it is closed",
+      { details: Object.freeze({ targetRef, ...place }) });
   }
 
   _authorizeTarget(target) {
@@ -479,6 +596,13 @@ export class BrowserControlPort {
       session.contextEpoch += 1;
       session.authorizationState = "unverified";
       session.authorizedTarget = null;
+      // Where the surface is now, for judging it against a later revision before its next request.
+      const frame = method === "Page.frameNavigated" ? params.frame : null;
+      if (frame && !frame.parentId && typeof frame.url === "string" && session.lastTarget) {
+        session.lastTarget = Object.freeze({ ...session.lastTarget, url: frame.url });
+        session.held = this.policy.allowsTarget(session.lastTarget) ? null : heldPlace(frame.url);
+        if (session.held) session.authorizationState = "held";
+      }
       method = "Transport.contextReplaced";
       params = { sourceMethod: event.method, contextEpoch: session.contextEpoch };
     }

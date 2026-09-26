@@ -127,6 +127,7 @@
     "test:browser-control": "node tests/browser/browserControl.mjs",
     "test:browser-control-stress": "node tests/browser/browserControlStress.mjs",
     "test:request-guard": "node tests/browser/requestGuardProduct.mjs",
+    "test:permission-revision": "node tests/browser/permissionRevisionProduct.mjs",
     "test:automation-lifecycle": "node tests/browser/automationLifecycleProduct.mjs",
     "test:action-convergence": "node tests/browser/actionConvergenceProduct.mjs",
     "test:hardware-visual-oracle": "node tests/browser/hardwareVisualOracleProduct.mjs",

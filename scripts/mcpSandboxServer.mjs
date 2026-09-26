@@ -14,11 +14,13 @@
 import { createInterface } from "node:readline";
 import { createControlProduct } from "./controlProtocol/controlProduct.mjs";
 import { McpControlAdapter, mcpToolResult } from "./controlProtocol/mcpControlAdapter.js";
+import { CONTROLLER_ONLY_TOOLS } from "./controlProtocol/controlOperations.js";
 import { createSkillMcpSurface } from "./skillOs/skillMcp.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18"; // 지원 MCP 스펙 리비전(클라이언트 제안을 에코 우선)
 const product = await createControlProduct();
-const { host: controlHost, tools: TOOLS } = product;
+const { host: controlHost } = product;
+const TOOLS = Object.freeze(product.tools.filter((tool) => !CONTROLLER_ONLY_TOOLS.includes(tool.name)));
 const mcpAdapter = new McpControlAdapter({ host: controlHost, tools: TOOLS });
 const skillMcp = await createSkillMcpSurface();
 const MCP_TOOLS = Object.freeze([...TOOLS, ...skillMcp.tools]);

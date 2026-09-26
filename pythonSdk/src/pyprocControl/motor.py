@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Literal, Mapping, Sequence
 
-from .models import ControlResult
+from .models import ControlError, ControlResult
 from .perception import SituationResult, plainMapping
 
 ActuationIntentKind = Literal["activate", "focus", "setValue", "setSelected", "setExpanded", "scrollTo", "dragTo"]
@@ -261,7 +261,17 @@ class MotorTaskSession:
             raise TypeError("Motor task requires exactly one url or targetRef")
         ownedTarget = False
         if hasUrl:
-            opened = client.openTarget(url, expectedRisk=expectedRisk, waitUntil=waitUntil, timeout=timeout)
+            try:
+                opened = client.openTarget(url, expectedRisk=expectedRisk, waitUntil=waitUntil, timeout=timeout)
+            except ControlError as error:
+                # The site sent the new tab outside the permission: the task cannot start there, so its tab is closed.
+                held = error.details.get("targetRef") if isinstance(error.details, dict) else None
+                if error.code == "BROWSER_CONTROL_SURFACE_HELD" and held:
+                    try:
+                        client.closeTarget(str(held), timeout=timeout)
+                    except ControlError:
+                        pass
+                raise
             targetRef = str(opened.output["targetRef"])
             ownedTarget = True
         assert targetRef is not None

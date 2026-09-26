@@ -303,6 +303,7 @@ try {
     preflight.ok === true
       && controlEntry === join(packageRoot, "scripts", "controlProtocol", "controlApi.js")
       && client.operations.length === 34 && client.operations.includes("machine.run")
+      && !client.operations.includes("automation.permission.revise")
       && client.operations.includes("automation.act") && client.operations.includes("memory.create")
       && client.operations.includes("effect.commit") && preflight.effectTransactions?.enabled === true,
   client.operations.join(","));

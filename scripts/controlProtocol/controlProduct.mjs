@@ -2,7 +2,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COI_HEADERS, createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
@@ -13,7 +13,8 @@ import {
   requestGuardLaunchArgs,
   requestGuardProfilePreferences,
 } from "../browserControl/requestGuard.mjs";
-import { createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
+import { assertPermissionRevisionHost, createBrowserControlTools, parseBrowserControlConfig }
+  from "../browserControl/index.js";
 import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
 import { FrameSpace, assertFrameSpaceConfig } from "../automationSpace/frameSpace.js";
 import { createFrameSpaceTools } from "../automationSpace/frameSpaceTools.js";
@@ -241,6 +242,8 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   if (browserConfig) {
     assertBrowserRequestHost({ requests: browserConfig.requests, targetOrigins: browserConfig.targetOrigins,
       providerKind, engineEnabled, recordingMode: recordingConfig?.mode || "" });
+    assertPermissionRevisionHost({ permissionRevision: browserConfig.permissionRevision, providerKind,
+      recordingMode: recordingConfig?.mode || "" });
   }
   const replayRecording = providerKind === "replay" ? await loadAutomationRecording(recordingConfig.file) : null;
   if (replayRecording) assertAutomationRecordingSelection(replayRecording, recordingConfig, browserConfig);
@@ -336,14 +339,19 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     }
     browserControl = automationSpace?.control || null;
     automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
+    // The permission Execution Memory records: the one the host started with, then each revision with its reference.
+    // File roots are recorded by digest: the manifest travels with handoffs, local folder names do not.
+    const permissionManifestOf = (browser, reference = undefined) => Object.freeze({
+      pythonNetwork: "denied",
+      browser: browser ? Object.freeze({ providerKind, targetOrigins: browser.targetOrigins, actions: browser.actions,
+        rawMethods: browser.rawMethods, maxRisk: browser.maxRisk,
+        fileRoots: browser.fileRoots.map((root) => createHash("sha256").update(root).digest("hex")).sort() }) : null,
+      ...(reference === undefined ? {} : { reference }),
+    });
     const memoryProduct = executionMemoryEnabled ? await createExecutionMemoryHandlers({
       root: env.PYPROC_EXECUTION_MEMORY_ROOT,
       pageBridge,
-      permissionManifest: Object.freeze({
-        pythonNetwork: "denied",
-        browser: browserConfig ? Object.freeze({ providerKind, targetOrigins: browserConfig.targetOrigins,
-          actions: browserConfig.actions, maxRisk: browserConfig.maxRisk }) : null,
-      }),
+      permissionManifest: permissionManifestOf(browserConfig),
       recordingConfig,
       recordingProvider: (consumer) => typeof automationRouter?.provider?.snapshotRecording === "function"
         ? automationRouter.withRecordingSnapshot(consumer) : consumer(recordingConfig),
@@ -351,6 +359,11 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       secretValues: env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES
         ? JSON.parse(env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES) : [],
     }) : null;
+    // Execution Memory records a permission revision before it takes effect; a revision it refuses changes nothing.
+    if (memoryProduct && typeof browserControl?.onPermissionRevision === "function") {
+      browserControl.onPermissionRevision((config, reference) => memoryProduct.revisePermissions(
+        permissionManifestOf(config, reference)));
+    }
     const effectProduct = effectTransactionsEnabled ? await createEffectTransactionHandlers({
       root: env.PYPROC_EXECUTION_MEMORY_ROOT,
       approvalAuthorities: JSON.parse(env.PYPROC_EFFECT_APPROVAL_AUTHORITIES || "[]"),

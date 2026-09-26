@@ -1044,6 +1044,16 @@ export class MotorTaskSession {
   close(requestOptions?: ControlRequestOptions): Promise<MotorTaskCleanup>;
 }
 
+/** A revision of the running browser permission; omitted fields keep their current value. */
+export interface ControlPermissionRevision {
+  readonly allowedOrigins?: readonly string[];
+  readonly actions?: readonly string[];
+  readonly rawMethods?: readonly string[];
+  readonly maxRisk?: "read" | "mutate" | "externalEffect";
+  readonly fileRoots?: readonly string[];
+  readonly reference?: string;
+}
+
 export class PyProcControlClient {
   private constructor();
   static start(configPath: string, options?: ControlProcessOptions): Promise<PyProcControlClient>;
@@ -1085,6 +1095,8 @@ export class PyProcControlClient {
   command(sessionRef: ControlSessionRef, method: string, params: Readonly<Record<string, unknown>>,
     options: ControlRequestOptions & { readonly expectedRisk: string }): Promise<ControlResult>;
   detachSession(sessionRef: ControlSessionRef, options?: ControlRequestOptions): Promise<ControlResult>;
+  /** Replace the running browser permission; widening needs `reference` (the approval behind it). */
+  revisePermission(revision: ControlPermissionRevision, options?: ControlRequestOptions): Promise<ControlResult>;
   readArtifact(artifactRef: string, options?: ControlRequestOptions & { readonly offset?: number; readonly maxBytes?: number }):
     Promise<ControlResult>;
   deleteArtifact(artifactRef: string, options?: ControlRequestOptions): Promise<ControlResult<ArtifactDeleteOutput>>;
