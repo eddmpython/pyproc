@@ -12,6 +12,17 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Changed
+
+- **Warm observations reuse an unchanged page.** A graph or situation observation reads the page's evidence first
+  (the DOM snapshot with form values, shadow trees, layout and visibility styles, the layout metrics, the document,
+  and focus moves counted in an isolated world) and answers from the session's last full capture when all of it is
+  unchanged, without reading the accessibility tree again; anything else reads the page again, so a reused answer is
+  never stale. The graph digest no longer copies every entity twice. On an unchanged page of 3,000 buttons a warm
+  situate went from about 0.8 to 1.1 s (P95) to about 100 ms; the gate `test:perception-reuse` holds P95 at 150 ms
+  and checks that text, a value or checked state set by script, open and closed shadow roots, a style rule, focus,
+  and scroll are all read. `browserInspect.perception.reusedObservations` counts reused answers.
+
 ## 0.0.33 - 2026-09-26
 
 ### Added

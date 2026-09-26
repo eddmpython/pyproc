@@ -135,6 +135,10 @@ jobs:
       - run: npm run test:permission-revision
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # warm situate: 바뀌지 않은 페이지는 직전 캡처로 답하고(P95 150 ms 이하), 어떤 변화도 놓치지 않는다.
+      - run: npm run test:perception-reuse
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       - run: npm run test:automation-lifecycle
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -200,6 +204,7 @@ jobs:
       - run: npm run test:browser-control-stress
       - run: npm run test:request-guard
       - run: npm run test:permission-revision
+      - run: npm run test:perception-reuse
       - name: Build the browser desktop helper outside the checkout
         if: runner.os == 'Windows'
         shell: pwsh

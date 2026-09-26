@@ -107,7 +107,7 @@ function normalizedPage(page = {}) {
 
 export class PerceptionSpace {
   constructor({ sensor, idFactory = () => crypto.randomUUID(), locatorIssuer = null,
-    locatorReset = null, visualProbe = null, visualRelease = null, now = () => Date.now(), timelineLimit = 32,
+    locatorReset = null, locatorsLive = null, visualProbe = null, visualRelease = null, now = () => Date.now(), timelineLimit = 32,
     providerKind = "nativeCdp", conformanceLevel = "L4", capabilityPolicy = () => null,
     subscriptions = false, inference = false, reportedCapabilities = false,
     nativeWebMcp = "unsupported" } = {}) {
@@ -115,6 +115,7 @@ export class PerceptionSpace {
     if (typeof idFactory !== "function" || typeof now !== "function") throw new TypeError("PerceptionSpace factories are invalid");
     if (locatorIssuer !== null && typeof locatorIssuer !== "function") throw new TypeError("PerceptionSpace locatorIssuer is invalid");
     if (locatorReset !== null && typeof locatorReset !== "function") throw new TypeError("PerceptionSpace locatorReset is invalid");
+    if (locatorsLive !== null && typeof locatorsLive !== "function") throw new TypeError("PerceptionSpace locatorsLive is invalid");
     if (visualProbe !== null && typeof visualProbe !== "function") throw new TypeError("PerceptionSpace visualProbe is invalid");
     if (visualRelease !== null && typeof visualRelease !== "function") throw new TypeError("PerceptionSpace visualRelease is invalid");
     if (typeof capabilityPolicy !== "function") throw new TypeError("PerceptionSpace capabilityPolicy is invalid");
@@ -122,6 +123,8 @@ export class PerceptionSpace {
     this.idFactory = idFactory;
     this.locatorIssuer = locatorIssuer;
     this.locatorReset = locatorReset;
+    // Whether locators this space issued for a session are all still issued (nothing cleared them since).
+    this.locatorsLive = locatorsLive;
     this.visualProbe = visualProbe;
     this.visualRelease = visualRelease;
     this.now = now;
@@ -135,8 +138,12 @@ export class PerceptionSpace {
     this.situationCompiler = new SituationCompiler({ capabilityProjector: this.capabilityProjector, now });
     this.situations = new Map();
     this.situationHistory = new Map();
+    // The last full capture each session committed, with the sensor evidence that lets the next capture reuse it.
+    this.captures = new Map();
     this.turns = new Map();
     this.observations = 0;
+    // Observations answered from the last full capture because the page's evidence had not changed (diagnostic).
+    this.reusedObservations = 0;
   }
 
   observe(sessionRef, input = {}, context = {}) {
@@ -189,68 +196,110 @@ export class PerceptionSpace {
       sensorContext = { ...context, postconditionPlan: Object.freeze({ ...context.postconditionPlan,
         entityQueries: Object.freeze(entityQueries) }) };
     }
-    const facts = await this.sensor.capture(sessionRef, captureOptions, sensorContext);
-    const documentEpoch = normalizedEpoch(facts.documentEpoch);
     const sessionKey = perceptionSessionKey(sessionRef);
+    // A full capture this space committed last may be reused when the sensor's evidence shows the page is the same;
+    // a focused (postcondition) capture or one without locators never reuses and never leaves anything to reuse.
+    const lastCapture = this.captures.get(sessionKey);
+    const reusable = !context.postconditionPlan && context.issueLocators !== false && lastCapture
+      && this.timeline.latest(sessionKey)?.observationRef === lastCapture.observationRef;
+    const captured = await this.sensor.capture(sessionRef, captureOptions,
+      reusable ? { ...sensorContext, reuseEvidence: lastCapture.evidence } : sensorContext);
+    const reused = captured.reused === true && reusable;
+    const facts = reused ? { ...captured, enumeration: lastCapture.enumeration, omitted: lastCapture.omitted } : captured;
+    const documentEpoch = normalizedEpoch(facts.documentEpoch);
     const visualProbes = [];
     const releasedArtifactRefs = new Set();
     let rollbackTimeline = null;
     try {
+      if (captured.reused === true && !reused) throw new Error("APX sensor reused a capture that was not offered");
       const identityState = this.identity.state(sessionRef, documentEpoch);
-      if (context.issueLocators !== false) this.locatorReset?.(sessionRef);
-      const refByNative = new Map();
-      const entities = [];
-      for (const source of facts.entities || []) {
-        const entityRef = this.identity.entityRef(identityState, source.nativeRef);
-        refByNative.set(source.nativeRef, entityRef);
-        const locatorRef = context.issueLocators === false || !source.locatorData || !this.locatorIssuer
-          ? null : this.locatorIssuer(sessionRef, documentEpoch, source.locatorData);
-        entities.push(normalizedEntity(source, entityRef, identityState, this.identity, locatorRef));
-      }
-      const reportedClaims = (facts.reportedClaims || []).map((claim) => {
-        const subjectRef = claim.subjectRef || refByNative.get(claim.subjectNativeRef);
-        if (!subjectRef) {
-          const error = new Error("reported claim target is outside the observed world");
-          error.code = "APX_SCHEMA_INVALID";
-          error.outcome = "notSent";
-          error.retryable = false;
-          throw error;
-        }
-        const { subjectNativeRef, ...publicClaim } = claim;
-        return Object.freeze({ ...publicClaim, subjectRef });
-      });
-      const focusedEnumeration = facts.enumeration?.entities === "focused";
-      if (!focusedEnumeration) this.identity.retainEntities(identityState, refByNative.keys());
-      let relations = [];
-      const seenRelations = new Set();
-      for (const relation of facts.relations || []) {
-        const from = refByNative.get(relation.fromNativeRef);
-        const to = refByNative.get(relation.toNativeRef);
-        if (!from || !to || from === to) continue;
-        const key = `${relation.type}:${from}:${to}`;
-        if (seenRelations.has(key)) continue;
-        seenRelations.add(key);
-        relations.push(Object.freeze({ type: String(relation.type), from, to,
-          provenance: frozenObject(relation.provenance
-            || { mode: "observed", source: "provider", trust: "browser" }) }));
-      }
-      let sourceEntities = entities;
-      if (focusedEnumeration) {
-        const previousState = this.timeline.latest(sessionKey);
-        if (previousState?.documentEpoch === documentEpoch) {
-          const refreshedQueries = context.postconditionPlan.entityQueries.map(postconditionEntityQuery);
-          const refreshedRefs = new Set(entities.map((entity) => entity.entityRef));
-          const retained = previousState.entities.filter((entity) =>
-            !refreshedRefs.has(entity.entityRef)
-            && !refreshedQueries.some((query) => queryPerceptionEntities([entity], query, null).length));
-          sourceEntities = [...retained.map(withoutTemporal), ...entities];
-          const sourceRefs = new Set(sourceEntities.map((entity) => entity.entityRef));
-          relations = [...previousState.relations, ...relations].filter((relation) =>
-            sourceRefs.has(relation.from) && sourceRefs.has(relation.to));
-        }
-      }
+      let committed;
+      let reportedClaims;
+      let focusedEnumeration = false;
       const observationRef = `observation:${this.idFactory()}`;
-      const committed = this.timeline.commit(sessionKey, documentEpoch, observationRef, sourceEntities, relations);
+      if (reused) {
+        // The same page: the latest graph again. Its locators still name the same nodes; they are issued again only
+        // when something cleared them since.
+        const live = this.locatorsLive?.(sessionRef, lastCapture.locatorRefs) === true;
+        let locatorRefs = null;
+        if (!live) {
+          this.locatorReset?.(sessionRef);
+          locatorRefs = new Map();
+          for (const [entityRef, locatorData] of lastCapture.locatorData) {
+            const locatorRef = this.locatorIssuer ? this.locatorIssuer(sessionRef, documentEpoch, locatorData) : null;
+            if (locatorRef) locatorRefs.set(entityRef, locatorRef);
+          }
+        }
+        committed = this.timeline.repeat(sessionKey, documentEpoch, observationRef, locatorRefs);
+        if (!committed) throw new Error("APX reused capture has no graph of this document");
+        reportedClaims = lastCapture.reportedClaims;
+        this.captures.set(sessionKey, Object.freeze({ ...lastCapture, observationRef,
+          ...(locatorRefs ? { locatorRefs: Object.freeze([...locatorRefs.values()]) } : {}) }));
+      } else {
+        if (context.issueLocators !== false) this.locatorReset?.(sessionRef);
+        const refByNative = new Map();
+        const entities = [];
+        const locatorData = new Map();
+        for (const source of facts.entities || []) {
+          const entityRef = this.identity.entityRef(identityState, source.nativeRef);
+          refByNative.set(source.nativeRef, entityRef);
+          const locatorRef = context.issueLocators === false || !source.locatorData || !this.locatorIssuer
+            ? null : this.locatorIssuer(sessionRef, documentEpoch, source.locatorData);
+          entities.push(normalizedEntity(source, entityRef, identityState, this.identity, locatorRef));
+          if (source.locatorData) locatorData.set(entityRef, source.locatorData);
+        }
+        reportedClaims = (facts.reportedClaims || []).map((claim) => {
+          const subjectRef = claim.subjectRef || refByNative.get(claim.subjectNativeRef);
+          if (!subjectRef) {
+            const error = new Error("reported claim target is outside the observed world");
+            error.code = "APX_SCHEMA_INVALID";
+            error.outcome = "notSent";
+            error.retryable = false;
+            throw error;
+          }
+          const { subjectNativeRef, ...publicClaim } = claim;
+          return Object.freeze({ ...publicClaim, subjectRef });
+        });
+        focusedEnumeration = facts.enumeration?.entities === "focused";
+        if (!focusedEnumeration) this.identity.retainEntities(identityState, refByNative.keys());
+        let relations = [];
+        const seenRelations = new Set();
+        for (const relation of facts.relations || []) {
+          const from = refByNative.get(relation.fromNativeRef);
+          const to = refByNative.get(relation.toNativeRef);
+          if (!from || !to || from === to) continue;
+          const key = `${relation.type}:${from}:${to}`;
+          if (seenRelations.has(key)) continue;
+          seenRelations.add(key);
+          relations.push(Object.freeze({ type: String(relation.type), from, to,
+            provenance: frozenObject(relation.provenance
+              || { mode: "observed", source: "provider", trust: "browser" }) }));
+        }
+        let sourceEntities = entities;
+        if (focusedEnumeration) {
+          const previousState = this.timeline.latest(sessionKey);
+          if (previousState?.documentEpoch === documentEpoch) {
+            const refreshedQueries = context.postconditionPlan.entityQueries.map(postconditionEntityQuery);
+            const refreshedRefs = new Set(entities.map((entity) => entity.entityRef));
+            const retained = previousState.entities.filter((entity) =>
+              !refreshedRefs.has(entity.entityRef)
+              && !refreshedQueries.some((query) => queryPerceptionEntities([entity], query, null).length));
+            sourceEntities = [...retained.map(withoutTemporal), ...entities];
+            const sourceRefs = new Set(sourceEntities.map((entity) => entity.entityRef));
+            relations = [...previousState.relations, ...relations].filter((relation) =>
+              sourceRefs.has(relation.from) && sourceRefs.has(relation.to));
+          }
+        }
+        committed = this.timeline.commit(sessionKey, documentEpoch, observationRef, sourceEntities, relations);
+        if (facts.evidence && !focusedEnumeration && context.issueLocators !== false) {
+          const issued = Object.freeze(committed.state.entities.map((entity) => entity.locatorRef).filter(Boolean));
+          this.captures.set(sessionKey, Object.freeze({ evidence: facts.evidence, observationRef, locatorData,
+            locatorRefs: issued,
+            reportedClaims: Object.freeze(reportedClaims), enumeration: facts.enumeration, omitted: facts.omitted }));
+        } else {
+          this.captures.delete(sessionKey);
+        }
+      }
       const { state } = committed;
       rollbackTimeline = committed.rollback;
       const candidateEvaluations = situationRequested ? evaluateRequirementCandidates(options.focus, state.entities, {
@@ -399,12 +448,16 @@ export class PerceptionSpace {
         while (history.size > 32) history.delete(history.keys().next().value);
         this.situationHistory.set(sessionKey, history);
         this.observations += 1;
+        if (reused) this.reusedObservations += 1;
         return capsule;
       }
       this.observations += 1;
+      if (reused) this.reusedObservations += 1;
       return Object.freeze(bounded);
     } catch (error) {
       rollbackTimeline?.();
+      if (lastCapture) this.captures.set(sessionKey, lastCapture);
+      else this.captures.delete(sessionKey);
       this.identity.restore(sessionRef, identitySnapshot);
       try { if (context.issueLocators !== false) this.locatorReset?.(sessionRef); }
       catch (resetError) { if (!error.cause) error.cause = resetError; }
@@ -431,6 +484,7 @@ export class PerceptionSpace {
     return Object.freeze({ ...inspectApxConformance({ visual: !!this.visualProbe, providerKind: this.providerKind,
       level: this.conformanceLevel, ...this.providerFeatures }),
       observations: this.observations,
+      reusedObservations: this.reusedObservations,
       resources: Object.freeze({
         sensorSessions: this.sensor.inspect?.().sessions || 0,
         identitySessions: identity.sessions,
@@ -446,6 +500,7 @@ export class PerceptionSpace {
         situationHistorySessions: this.situationHistory.size,
         situationHistoryEntries,
         capabilities: capabilities.capabilities,
+        reusableCaptures: this.captures.size,
         turns: this.turns.size,
       }) });
   }
@@ -477,6 +532,7 @@ export class PerceptionSpace {
     this.sensor.dropSession?.(sessionRef);
     this.identity.dropSession(sessionRef);
     this.timeline.dropSession(key);
+    this.captures.delete(key);
     this.worldModel.dropSession(key);
     this.capabilityProjector.dropSession(sessionRef);
     this.situations.delete(key);

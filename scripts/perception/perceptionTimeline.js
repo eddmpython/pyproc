@@ -1,5 +1,6 @@
 // perceptionTimeline.js - immutable full graph, delta, temporal metadata, graph digest의 bounded ledger.
-import { apxDigest } from "./apxCanonical.js";
+import { createHash } from "node:crypto";
+import { apxDigest, canonicalJsonImage } from "./apxCanonical.js";
 import { compareNames } from "../../src/machine/contracts/deterministicOrder.js";
 
 const DEFAULT_LIMIT = 32;
@@ -15,12 +16,26 @@ function comparableEntity(entity) {
   return copy;
 }
 
-function graphBody(entities, relations) {
-  return {
-    entities: entities.map(comparableEntity).sort((left, right) => compareNames(left.entityRef, right.entityRef)),
-    relations: relations.map(cloneJson).sort((left, right) =>
-      compareNames(`${left.type}:${left.from}:${left.to}`, `${right.type}:${right.from}:${right.to}`)),
-  };
+// The canonical text of an entity as the graph compares it (without its locator and temporal metadata), built once.
+function comparableText(entity) {
+  const { locatorRef: _locatorRef, temporal: _temporal, ...body } = entity;
+  return canonicalJsonImage(body);
+}
+
+function sha256(text) {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+// apxDigest({entities, relations}) of the graph, entities ordered by entityRef and relations by type, from and to,
+// streamed from texts already built: the same bytes and digest as canonicalizing the copied graph.
+function graphDigest(entityTexts, relations) {
+  const relationTexts = relations.map((relation) => ({ key: `${relation.type}:${relation.from}:${relation.to}`,
+    text: canonicalJsonImage(relation) })).sort((left, right) => compareNames(left.key, right.key));
+  const hash = createHash("sha256").update('{"entities":[');
+  entityTexts.forEach((entry, index) => hash.update(index ? `,${entry.text}` : entry.text));
+  hash.update('],"relations":[');
+  relationTexts.forEach((entry, index) => hash.update(index ? `,${entry.text}` : entry.text));
+  return hash.update("]}").digest("hex");
 }
 
 function difference(before, after, path = "") {
@@ -56,9 +71,11 @@ export class PerceptionTimeline {
       this.sessions.set(sessionKey, session);
     }
     const previous = session.latest;
+    const entityTexts = [];
     const entities = sourceEntities.map((entity) => {
-      const comparable = comparableEntity(entity);
-      const fingerprint = apxDigest(comparable);
+      const text = comparableText(entity);
+      entityTexts.push({ entityRef: entity.entityRef, text });
+      const fingerprint = sha256(text);
       const known = session.temporal.get(entity.entityRef);
       const temporal = {
         firstSeen: known?.firstSeen || observationRef,
@@ -75,7 +92,8 @@ export class PerceptionTimeline {
       documentEpoch,
       entities: Object.freeze(entities),
       relations: Object.freeze([...relations]),
-      graphSha256: apxDigest(graphBody(entities, relations)),
+      graphSha256: graphDigest(entityTexts.sort((left, right) => compareNames(left.entityRef, right.entityRef)),
+        relations),
     });
     session.observations.set(observationRef, state);
     session.order.push(observationRef);
@@ -90,19 +108,53 @@ export class PerceptionTimeline {
     return Object.freeze({ state, previous, rollback });
   }
 
+  // The latest graph again as a new observation, for a capture whose evidence shows the page did not change: the same
+  // entities, relations, and graph digest, each entity seen again now (its first-seen and last-changed stay), with the
+  // locators issued for this observation (`locatorRefs` by entity), or the ones it had (null). Null when there is no
+  // latest graph of this document.
+  repeat(sessionKey, documentEpoch, observationRef, locatorRefs) {
+    const session = this.sessions.get(sessionKey);
+    const previous = session?.latest;
+    if (!previous || session.documentEpoch !== documentEpoch) return null;
+    const backup = { documentEpoch: session.documentEpoch, observations: new Map(session.observations),
+      order: [...session.order], temporal: new Map(session.temporal), latest: session.latest };
+    const entities = previous.entities.map((entity) => {
+      const temporal = Object.freeze({ firstSeen: entity.temporal.firstSeen, lastSeen: observationRef,
+        lastChanged: entity.temporal.lastChanged });
+      session.temporal.set(entity.entityRef, { ...temporal, fingerprint: session.temporal.get(entity.entityRef)?.fingerprint });
+      if (!locatorRefs) return Object.freeze({ ...entity, temporal });
+      const { locatorRef: _locatorRef, ...body } = entity;
+      const locatorRef = locatorRefs.get(entity.entityRef);
+      return Object.freeze({ ...body, ...(locatorRef ? { locatorRef } : {}), temporal });
+    });
+    const state = Object.freeze({ observationRef, documentEpoch, entities: Object.freeze(entities),
+      relations: previous.relations, graphSha256: previous.graphSha256 });
+    session.observations.set(observationRef, state);
+    session.order.push(observationRef);
+    session.latest = state;
+    while (session.order.length > this.limit) session.observations.delete(session.order.shift());
+    const rollback = () => {
+      if (this.sessions.get(sessionKey)?.latest?.observationRef !== observationRef) return false;
+      this.sessions.set(sessionKey, backup);
+      return true;
+    };
+    return Object.freeze({ state, previous, rollback });
+  }
+
   get(sessionKey, observationRef) { return this.sessions.get(sessionKey)?.observations.get(observationRef) || null; }
   latest(sessionKey) { return this.sessions.get(sessionKey)?.latest || null; }
 
   diff(base, current) {
-    const before = new Map(base.entities.map((entity) => [entity.entityRef, comparableEntity(entity)]));
-    const after = new Map(current.entities.map((entity) => [entity.entityRef, comparableEntity(entity)]));
+    // Entities are compared by their canonical text; only one that differs is copied to find the changed paths.
+    const before = new Map(base.entities.map((entity) => [entity.entityRef, entity]));
+    const after = new Map(current.entities.map((entity) => [entity.entityRef, entity]));
     const added = [];
     const removed = [];
     const changed = [];
     for (const [ref, entity] of after) {
       if (!before.has(ref)) added.push(ref);
-      else if (apxDigest(before.get(ref)) !== apxDigest(entity)) {
-        const paths = difference(before.get(ref), entity);
+      else if (comparableText(before.get(ref)) !== comparableText(entity)) {
+        const paths = difference(comparableEntity(before.get(ref)), comparableEntity(entity));
         if (paths.length) changed.push(Object.freeze({ entityRef: ref, paths: Object.freeze(paths.map(Object.freeze)) }));
       }
     }

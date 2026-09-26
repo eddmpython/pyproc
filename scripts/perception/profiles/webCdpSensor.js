@@ -1,4 +1,5 @@
 // webCdpSensor.js - CDP AX, DOMSnapshot, layout, event facts를 driver-neutral sensor facts로 정규화한다.
+import { createHash } from "node:crypto";
 import { redactBrowserUrl } from "../../browserControl/browserObservation.js";
 import { perceptionSessionKey } from "../perceptionIdentity.js";
 import { APX_UNRESOLVED_REASONS } from "../unresolvedVocabulary.js";
@@ -30,6 +31,19 @@ const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"]);
 const CONTAINER_ROLES = new Set(["form", "group", "list", "listitem", "row", "table", "tree", "document"]);
 const LANDMARK_ROLES = new Set(["banner", "complementary", "contentinfo", "main", "navigation", "region", "search"]);
 const STATUS_ROLES = new Set(["alert", "log", "marquee", "status", "timer"]);
+// An isolated world the page cannot see or change: it counts focus moves, including those inside closed shadow roots
+// (focusin and focusout are composed), which a DOM snapshot does not carry.
+const EVIDENCE_WORLD = "pyprocApxEvidence";
+const FOCUS_MOVES_EXPRESSION = `(() => {
+  const evidence = globalThis.__pyprocApxEvidence || (globalThis.__pyprocApxEvidence = (() => {
+    let moves = 0;
+    const count = () => { moves += 1; };
+    for (const type of ["focusin", "focusout"]) document.addEventListener(type, count, true);
+    for (const type of ["focus", "blur"]) window.addEventListener(type, count, true);
+    return { read: () => moves };
+  })());
+  return evidence.read();
+})()`;
 const [CANVAS_UNRESOLVED, UNLABELLED_IMAGE, UNLABELLED_CONTROL, GEOMETRY_UNAVAILABLE] = APX_UNRESOLVED_REASONS;
 const ENVIRONMENT_EXPRESSION = `(() => {
   const canvas = document.createElement("canvas");
@@ -188,6 +202,32 @@ function sensitiveValue(attributes, role, value) {
   return { value: clipped(value), sensitivity: INPUT_ROLES.has(role) ? "unknown-sensitive" : "public" };
 }
 
+function webViewport(metrics) {
+  const viewportRaw = metrics.cssVisualViewport || metrics.cssLayoutViewport || {};
+  return {
+    x: Number(viewportRaw.pageX ?? viewportRaw.pageX) || 0,
+    y: Number(viewportRaw.pageY ?? viewportRaw.pageY) || 0,
+    width: Number(viewportRaw.clientWidth) || 0,
+    height: Number(viewportRaw.clientHeight) || 0,
+    scale: Number(viewportRaw.scale) || 1,
+  };
+}
+
+// The page as one capture saw it, from the DOM snapshot, the layout metrics, and the target's own URL.
+function webPage(domResult, metricsResult, targetUrl, environmentCommand) {
+  const strings = domResult.strings || [];
+  const rootDocument = (domResult.documents || [])[0] || {};
+  const viewport = webViewport(metricsResult);
+  return Object.freeze({
+    url: redactBrowserUrl(targetUrl || stringAt(strings, rootDocument.documentURL)),
+    title: clipped(stringAt(strings, rootDocument.title), 500),
+    viewport: Object.freeze({ width: viewport.width, height: viewport.height, scale: viewport.scale }),
+    scroll: Object.freeze({ x: viewport.x, y: viewport.y }),
+    ...(environmentCommand?.result?.result?.value
+      ? { environment: Object.freeze(environmentCommand.result.result.value) } : {}),
+  });
+}
+
 export function parseWebDomSnapshot(payload, metrics) {
   const strings = payload.strings || [];
   const records = [];
@@ -230,14 +270,7 @@ export function parseWebDomSnapshot(payload, metrics) {
     }
     recordsByDocument.set(documentIndex, documentRecords);
   }
-  const viewportRaw = metrics.cssVisualViewport || metrics.cssLayoutViewport || {};
-  const viewport = {
-    x: Number(viewportRaw.pageX ?? viewportRaw.pageX) || 0,
-    y: Number(viewportRaw.pageY ?? viewportRaw.pageY) || 0,
-    width: Number(viewportRaw.clientWidth) || 0,
-    height: Number(viewportRaw.clientHeight) || 0,
-    scale: Number(viewportRaw.scale) || 1,
-  };
+  const viewport = webViewport(metrics);
   for (const record of records) {
     const opacity = record.styles.opacity === "" ? 1 : Number(record.styles.opacity);
     record.visible = !!record.rect && record.rect.width > 0 && record.rect.height > 0
@@ -345,6 +378,38 @@ export class WebCdpSensor {
     this.environmentCommand = environmentCommand || command;
     this.enabledSessions = new Set();
     this.focusedSupport = new Map();
+    this.evidenceWorlds = new Map();
+  }
+
+  // The focus moves counted in the session's evidence world, as `<world>:<moves>`, or null when it cannot be read (the
+  // world is created on first use and again after the document that held it went away).
+  async _focusMoves(sessionRef, context) {
+    const key = perceptionSessionKey(sessionRef);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        let world = this.evidenceWorlds.get(key);
+        if (!world) {
+          const tree = await this.environmentCommand(sessionRef, "Page.getFrameTree", {},
+            context.commandResults || [], context.signal);
+          const created = await this.environmentCommand(sessionRef, "Page.createIsolatedWorld", {
+            frameId: tree.result?.frameTree?.frame?.id, worldName: EVIDENCE_WORLD,
+          }, context.commandResults || [], context.signal);
+          world = Number(created.result?.executionContextId);
+          if (!Number.isInteger(world)) return null;
+          this.evidenceWorlds.set(key, world);
+        }
+        const read = await this.environmentCommand(sessionRef, "Runtime.evaluate", {
+          expression: FOCUS_MOVES_EXPRESSION, contextId: world, returnByValue: true,
+        }, context.commandResults || [], context.signal);
+        const moves = read.result?.result?.value;
+        if (read.result?.exceptionDetails || !Number.isInteger(moves)) throw new Error("focus evidence unavailable");
+        return `${world}:${moves}`;
+      } catch (error) {
+        if (error?.code === "BROWSER_CONTROL_COMMAND_CANCELLED" || context.signal?.aborted) throw error;
+        this.evidenceWorlds.delete(key);
+      }
+    }
+    return null;
   }
 
   async capture(sessionRef, options, context = {}) {
@@ -368,16 +433,44 @@ export class WebCdpSensor {
         }
       }
     }
-    const axCommand = await this.command(sessionRef, "Accessibility.getFullAXTree", {}, context.commandResults || [], context.signal);
+    // Evidence first, the accessibility tree last: focus moves, then the DOM snapshot (text, attributes, form values,
+    // checked state, shadow trees, layout and the computed styles that decide visibility) and the layout metrics. When
+    // all of it equals what the caller's last full capture saw, in the same document, the page it describes is the one
+    // already read, and the tree is not read again.
+    const focusMoves = await this._focusMoves(sessionRef, context);
     const domCommand = await this.command(sessionRef, "DOMSnapshot.captureSnapshot", {
       computedStyles: APX_WEB_COMPUTED_STYLES,
       includePaintOrder: true,
       includeDOMRects: true,
     }, context.commandResults || [], context.signal);
     const metricsCommand = await this.command(sessionRef, "Page.getLayoutMetrics", {}, context.commandResults || [], context.signal);
+    const evidence = focusMoves === null ? null : createHash("sha256")
+      .update(`${Number(domCommand.contextEpoch) || 0}|${focusMoves}|`)
+      .update(JSON.stringify(domCommand.result || {})).update("|")
+      .update(JSON.stringify(metricsCommand.result || {})).digest("hex");
     const environmentCommand = options.channels.includes("environment")
       ? await this.environmentCommand(sessionRef, "Runtime.evaluate", { expression: ENVIRONMENT_EXPRESSION,
         returnByValue: true, awaitPromise: false }, context.commandResults || [], context.signal) : null;
+    if (evidence !== null && evidence === context.reuseEvidence) {
+      const capturedEvents = this.eventCapture ? await this.eventCapture(sessionRef, {
+        includeConsole: options.channels.includes("events"),
+        includeNetwork: options.channels.includes("networkMetadata"),
+        maxEvents: 100,
+        ...(context.eventWatermarks ? { eventWatermarks: context.eventWatermarks } : {}),
+      }, context.commandResults || [], context.signal) : {};
+      return Object.freeze({
+        reused: true,
+        evidence,
+        documentEpoch: Number(domCommand.contextEpoch) || 0,
+        page: webPage(domCommand.result || {}, metricsCommand.result || {}, domCommand.target?.url, environmentCommand),
+        events: Object.freeze([...(capturedEvents.console || []), ...(capturedEvents.network || [])]),
+        eventWindows: Object.freeze([...(capturedEvents.eventWindows || [])]),
+        completeness: Object.freeze({ semantic: "complete", structure: "complete", geometry: "complete",
+          interaction: "complete", network: options.channels.includes("networkMetadata") ? "metadata-only" : "notRequested",
+          environment: options.channels.includes("environment") ? "complete" : "notRequested" }),
+      });
+    }
+    const axCommand = await this.command(sessionRef, "Accessibility.getFullAXTree", {}, context.commandResults || [], context.signal);
     const dom = parseWebDomSnapshot(domCommand.result || {}, metricsCommand.result || {});
     const axNodes = (axCommand.result?.nodes || []).filter((node) => !node.ignored);
     const axById = new Map(axNodes.map((node) => [node.nodeId, node]));
@@ -505,18 +598,12 @@ export class WebCdpSensor {
       maxEvents: 100,
       ...(context.eventWatermarks ? { eventWatermarks: context.eventWatermarks } : {}),
     }, context.commandResults || [], context.signal);
-    const rootDocument = dom.documents[0] || {};
-    const pageUrl = redactBrowserUrl(axCommand.target?.url || stringAt(dom.strings, rootDocument.documentURL));
+    // The evidence belongs to this capture only when the tree was read in the document the snapshot saw.
+    const sameDocument = Number(axCommand.contextEpoch) === Number(domCommand.contextEpoch);
     return Object.freeze({
+      ...(evidence !== null && sameDocument ? { evidence } : {}),
       documentEpoch: Number(axCommand.contextEpoch) || 0,
-      page: Object.freeze({
-        url: pageUrl,
-        title: clipped(stringAt(dom.strings, rootDocument.title), 500),
-        viewport: Object.freeze({ width: dom.viewport.width, height: dom.viewport.height, scale: dom.viewport.scale }),
-        scroll: Object.freeze({ x: dom.viewport.x, y: dom.viewport.y }),
-        ...(environmentCommand?.result?.result?.value
-          ? { environment: Object.freeze(environmentCommand.result.result.value) } : {}),
-      }),
+      page: webPage(domCommand.result || {}, metricsCommand.result || {}, axCommand.target?.url, environmentCommand),
       entities: Object.freeze(sources),
       relations: Object.freeze(relations),
       events: Object.freeze([...(capturedEvents.console || []), ...(capturedEvents.network || [])]),
@@ -601,10 +688,12 @@ export class WebCdpSensor {
     const key = perceptionSessionKey(sessionRef);
     this.enabledSessions.delete(key);
     this.focusedSupport.delete(key);
+    this.evidenceWorlds.delete(key);
   }
   inspect() {
-    return Object.freeze({ sessions: new Set([...this.enabledSessions, ...this.focusedSupport.keys()]).size,
+    return Object.freeze({ sessions: new Set([...this.enabledSessions, ...this.focusedSupport.keys(),
+      ...this.evidenceWorlds.keys()]).size,
       enabledSessions: this.enabledSessions.size, focusedSupport: this.focusedSupport.size });
   }
-  close() { this.enabledSessions.clear(); this.focusedSupport.clear(); }
+  close() { this.enabledSessions.clear(); this.focusedSupport.clear(); this.evidenceWorlds.clear(); }
 }

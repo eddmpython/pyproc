@@ -378,6 +378,10 @@ export class BrowserAutomation {
       }),
       idFactory,
       locatorReset: (sessionRef) => this._clearSessionLocators(sessionKey(sessionRef)),
+      locatorsLive: (sessionRef, locatorRefs) => {
+        const issued = this._sessionLocators.get(sessionKey(sessionRef));
+        return !!issued && locatorRefs.every((locatorRef) => issued.has(locatorRef));
+      },
       locatorIssuer: (sessionRef, contextEpoch, locatorData) =>
         this._issueOpaqueLocator(sessionRef, contextEpoch, locatorData.backendNodeId),
       visualProbe: visualProbeEnabled ? this._visualProbe : null,

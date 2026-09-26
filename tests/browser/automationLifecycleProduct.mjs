@@ -30,7 +30,7 @@ const zeroPaths = Object.freeze([
   "perception.timelineSessions", "perception.timelineObservations", "perception.temporalEntities",
   "perception.worldSessions", "perception.worlds", "perception.claims",
   "perception.situations", "perception.situationHistorySessions",
-  "perception.situationHistoryEntries", "perception.capabilities", "perception.turns",
+  "perception.situationHistoryEntries", "perception.capabilities", "perception.reusableCaptures", "perception.turns",
 ]);
 
 async function profileNames() {

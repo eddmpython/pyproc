@@ -8,7 +8,9 @@ import {
   inspectApxConformance,
   validatePerceptionOptions,
 } from "../../scripts/perception/apxCatalog.js";
-import { apxDigest, canonicalApxJson } from "../../scripts/perception/apxCanonical.js";
+import { apxDigest, canonicalApxJson, canonicalJsonImage } from "../../scripts/perception/apxCanonical.js";
+import { PerceptionTimeline } from "../../scripts/perception/perceptionTimeline.js";
+import { compareNames } from "../../src/machine/contracts/deterministicOrder.js";
 import { PerceptionSpace } from "../../scripts/perception/perceptionSpace.js";
 import { ActionEvidenceLoop, assertActionEvidence } from "../../scripts/perception/actionEvidence.js";
 import { validatePostcondition, verifyPostcondition } from "../../scripts/perception/postconditionVerifier.js";
@@ -48,7 +50,112 @@ function sensorEntity(nativeRef, { role, name, kind = "ui.control", disabled = f
   };
 }
 
+// The graph digest as the timeline first defined it: every entity copied through JSON without its locator and temporal
+// metadata, sorted, and the whole graph canonicalized at once. The timeline builds each text once instead; both must
+// give the same bytes.
+function referenceGraphSha256(entities, relations) {
+  const copy = (value) => JSON.parse(JSON.stringify(value));
+  const comparable = (entity) => {
+    const body = copy(entity);
+    delete body.locatorRef;
+    delete body.temporal;
+    return body;
+  };
+  return apxDigest({
+    entities: entities.map(comparable).sort((left, right) => compareNames(left.entityRef, right.entityRef)),
+    relations: relations.map(copy).sort((left, right) =>
+      compareNames(`${left.type}:${left.from}:${left.to}`, `${right.type}:${right.from}:${right.to}`)),
+  });
+}
+
+function assertTimelineDigestsAreTheReference() {
+  const sparse = [1, , 3]; // eslint-disable-line no-sparse-arrays
+  for (const value of [{ b: 1, a: [undefined, () => 1, NaN, Infinity, -0, "é"], c: undefined, d: { f: Symbol.for("x") } },
+    sparse, [], {}, "", 0, { nested: { deeper: [{ z: 1, y: [null, true] }] } }, new Date(0), { at: new Date(0) }]) {
+    assert(canonicalJsonImage(value) === canonicalApxJson(JSON.parse(JSON.stringify(value))),
+      `canonicalJsonImage differs from the JSON copy for ${String(value)}`);
+  }
+  const entities = Array.from({ length: 300 }, (_, index) => ({
+    entityRef: `entity:${(index * 7919) % 300}`, locatorRef: `locator:${index}`, role: index % 3 ? "button" : "link",
+    name: `row ${index}`, states: { focused: index === 5, hidden: undefined }, bounds: [index, 0, 10, NaN],
+    temporal: { firstSeen: "x" },
+  }));
+  const relations = [{ type: "contains", from: "entity:1", to: "entity:2" }, { type: "labels", from: "entity:0", to: "entity:9", note: undefined },
+    { type: "contains", from: "entity:1", to: "entity:0" }];
+  const timeline = new PerceptionTimeline();
+  const first = timeline.commit("session:a", 1, "observation:1", entities, relations).state;
+  assert(first.graphSha256 === referenceGraphSha256(entities, relations), "timeline graph digest is not the reference digest");
+  const moved = entities.map((entity, index) => (index === 42 ? { ...entity, name: "moved" } : entity));
+  const second = timeline.commit("session:a", 1, "observation:2", moved, relations).state;
+  const delta = timeline.diff(first, second);
+  assert(second.graphSha256 === referenceGraphSha256(moved, relations) && second.graphSha256 !== first.graphSha256
+    && delta.changed.length === 1 && delta.changed[0].entityRef === entities[42].entityRef
+    && delta.changed[0].paths[0].path === "/name" && !delta.added.length && !delta.removed.length,
+  "timeline diff does not name exactly the changed entity and path");
+  const unchanged = second.entities.find((entity) => entity.entityRef === entities[0].entityRef);
+  const touched = second.entities.find((entity) => entity.entityRef === entities[42].entityRef);
+  assert(unchanged.temporal.lastChanged === "observation:1" && touched.temporal.lastChanged === "observation:2",
+    "timeline temporal lastChanged does not follow the entity text");
+}
+
+// A capture reused on unchanged evidence: the same graph as a new observation (seen again now, changed when it was),
+// its locators kept while nothing cleared them and issued again when something did, and nothing reused when the
+// evidence differs, when there is none, for a focused capture, or after a failure.
+async function assertCaptureReuse() {
+  const offered = [];
+  let evidence = "evidence:1";
+  let full = 0;
+  const issued = new Set();
+  let issuedCount = 0;
+  const space = new PerceptionSpace({
+    sensor: { capture: async (sessionRef, options, context) => {
+      offered.push(context.reuseEvidence || null);
+      if (context.reuseEvidence && context.reuseEvidence === evidence) {
+        return { reused: true, evidence, documentEpoch: 1, page: { title: "again" }, events: [], completeness: {} };
+      }
+      full += 1;
+      return { evidence, documentEpoch: 1, page: {}, relations: [], events: [], completeness: {},
+        entities: [sensorEntity("native:11", { role: "button", name: `Save ${full === 3 ? "changed" : ""}`.trim() }),
+          sensorEntity("native:12", { role: "button", name: "Cancel" })] };
+    } },
+    idFactory: (() => { let id = 0; return () => `reuse_${++id}`; })(),
+    locatorIssuer: (sessionRef, epoch, data) => { const ref = `locator:${++issuedCount}:${data.backendNodeId}`; issued.add(ref); return ref; },
+    locatorReset: () => issued.clear(),
+    locatorsLive: (sessionRef, refs) => refs.every((ref) => issued.has(ref)),
+  });
+  const sessionRef = { sessionId: "reuse" };
+  const graph = () => space.observe(sessionRef, { representation: APX_REPRESENTATION });
+  const first = await graph();
+  const second = await graph();
+  const save = (observation) => observation.entities.find((entity) => entity.semantic?.name?.startsWith("Save"));
+  assert(full === 1 && offered.join(",") === ",evidence:1" && space.inspect().reusedObservations === 1
+    && second.observationRef !== first.observationRef && second.integrity.graphSha256 === first.integrity.graphSha256
+    && save(second).locatorRef === save(first).locatorRef && issuedCount === 2
+    && save(second).temporal.lastSeen === second.observationRef && save(second).temporal.lastChanged === first.observationRef,
+  "unchanged evidence did not answer the same graph, seen again, with its locators kept");
+  issued.clear();
+  const third = await graph();
+  assert(space.inspect().reusedObservations === 2 && save(third).locatorRef !== save(first).locatorRef
+    && issued.has(save(third).locatorRef) && issuedCount === 4,
+  "a reused capture whose locators were cleared did not issue them again");
+  evidence = "evidence:2";
+  const fourth = await graph();
+  assert(full === 2 && space.inspect().reusedObservations === 2 && fourth.integrity.graphSha256 === first.integrity.graphSha256
+    && save(fourth).temporal.lastChanged === first.observationRef, "changed evidence did not read the page again");
+  evidence = "evidence:3";
+  const fifth = await graph();
+  assert(full === 3 && save(fifth).semantic.name === "Save changed" && save(fifth).temporal.lastChanged === fifth.observationRef,
+    "a page read again did not show what changed");
+  await space.observe(sessionRef, { representation: APX_REPRESENTATION, query: { role: "button" } });
+  assert(space.inspect().reusedObservations === 3, "an unchanged page was not reused for a query");
+  space.dropSession(sessionRef);
+  assert(space.inspect().resources.reusableCaptures === 0, "dropping a session left its reusable capture");
+  space.close();
+}
+
 export async function assertPerceptionSpaceContract() {
+  assertTimelineDigestsAreTheReference();
+  await assertCaptureReuse();
   assert(APX_UNRESOLVED_REASONS.join(",")
     === "canvas,unlabelledImage,unlabelledControl,geometryUnavailable,semanticUnavailable"
     && isVisualApxUnresolvedReason("unlabelledImage")

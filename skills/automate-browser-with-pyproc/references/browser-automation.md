@@ -252,6 +252,15 @@ transport session immediately while preserving the stale-session error contract.
 event, and redacted network facts into a bounded graph. It is provider-neutral and never exposes CDP node,
 frame, object, or execution-context identifiers.
 
+A graph or situation observation after the first reads the page's evidence before its accessibility tree: the DOM
+snapshot (text, attributes, form values and checked state, open and closed shadow trees, layout, and the computed
+styles that decide visibility), the layout metrics, the document, and the focus moves an isolated world counts. When
+all of it equals what the session's last full capture saw, that capture answers again as a new observation (each
+entity seen again now, changed when it last changed, its locators kept or issued again), and the tree is not read.
+Anything else reads the whole page again, so a reused answer is never stale. On an unchanged page of 3,000 buttons a
+warm situate takes about 100 ms instead of about a second. `browserInspect.perception.reusedObservations` counts the
+reused answers; `resources.perception.reusableCaptures` holds one capture per session.
+
 ### Complete legacy semantic inventories
 
 A legacy observation returns at most 1,000 nodes per call. When more nodes belong to the captured snapshot,

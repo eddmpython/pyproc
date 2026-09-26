@@ -128,6 +128,7 @@
     "test:browser-control-stress": "node tests/browser/browserControlStress.mjs",
     "test:request-guard": "node tests/browser/requestGuardProduct.mjs",
     "test:permission-revision": "node tests/browser/permissionRevisionProduct.mjs",
+    "test:perception-reuse": "node tests/browser/perceptionReuseProduct.mjs",
     "test:browser-desktop": "node tests/browser/browserDesktopProduct.mjs",
     "test:automation-lifecycle": "node tests/browser/automationLifecycleProduct.mjs",
     "test:action-convergence": "node tests/browser/actionConvergenceProduct.mjs",
