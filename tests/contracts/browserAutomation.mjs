@@ -50,6 +50,7 @@ class FakePort {
     this.policy = { inspect: () => ({ methods: Object.keys(BROWSER_CONTROL_COMMAND_RISKS) }) };
     this.commands = [];
     this.contextEpoch = 3;
+    this.mainDocumentEpoch = 3;
     this.failMethod = null;
     this.failExpression = null;
     this.failPredicate = null;
@@ -188,6 +189,7 @@ class FakePort {
       state: BROWSER_CONTROL_COMMAND_RISKS[command.method] === "read" ? "observed" : "applied",
       risk: BROWSER_CONTROL_COMMAND_RISKS[command.method],
       contextEpoch: this.contextEpoch,
+      mainDocumentEpoch: this.mainDocumentEpoch,
       target: Object.freeze({ type: "page", url: this.url, title: "" }),
       result,
     });
@@ -701,12 +703,32 @@ export async function assertBrowserAutomationContract() {
       port.contextEpoch += 1;
     }
   };
+  const inputBeforeChild = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  const childReplaced = await automation.run(session, [{
+    kind: "click", selector: "#save", expectedRisk: "externalEffect",
+  }]);
+  const inputAfterChild = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  assert(childReplaced.actions[0].state === "applied" && inputAfterChild === inputBeforeChild + 2,
+    "child frame replacement blocked an unchanged main target before send");
+  port.afterCommand = null;
+  port.contextEpoch = 3;
+  rotatedAtIdentity = false;
+
+  port.afterCommand = (command) => {
+    if (!rotatedAtIdentity && command.method === "Runtime.callFunctionOn"
+      && command.params?.functionDeclaration?.includes("this === other")) {
+      rotatedAtIdentity = true;
+      port.contextEpoch += 1;
+      port.mainDocumentEpoch += 1;
+    }
+  };
   const inputBeforeRotation = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
   const rotatedDocument = await errorOf(() => automation.run(session, [{
     kind: "click", selector: "#save", expectedRisk: "externalEffect",
   }]));
   port.afterCommand = null;
   port.contextEpoch = 3;
+  port.mainDocumentEpoch = 3;
   const inputAfterRotation = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
   assert(rotatedDocument?.code === "APX_CAPABILITY_STALE" && rotatedDocument.outcome === "notSent"
     && inputAfterRotation === inputBeforeRotation,

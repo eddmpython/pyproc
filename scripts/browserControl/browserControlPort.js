@@ -203,6 +203,7 @@ export class BrowserControlPort {
       authorizedTarget: described,
       lastTarget: described,
       contextEpoch: 0,
+      mainDocumentEpoch: 0,
       unsubscribe: null,
     };
     session.unsubscribe = this._transport.subscribe(transportSession, (event) => this._receiveEvent(session, event));
@@ -517,6 +518,7 @@ export class BrowserControlPort {
         state: risk === "read" ? "observed" : "applied",
         risk,
         contextEpoch: session.contextEpoch,
+        mainDocumentEpoch: session.mainDocumentEpoch,
         target: Object.freeze({ type: target.type, url: target.url, title: target.title }),
         result,
       });
@@ -690,6 +692,7 @@ export class BrowserControlPort {
       if (frame?.parentId) {
         // A child frame's navigation replaces the locator epoch, not the surface: the page is where it was.
       } else if (frame && typeof frame.url === "string" && session.lastTarget) {
+        session.mainDocumentEpoch += 1;
         // The main frame committed this URL: the surface is judged by it at once, so a page that moved on inside the
         // permission (an interstitial that starts a download, say) keeps its events flowing.
         session.lastTarget = Object.freeze({ ...session.lastTarget, url: frame.url });
@@ -698,6 +701,7 @@ export class BrowserControlPort {
         session.authorizationState = allowed ? "verified" : "held";
         session.authorizedTarget = allowed ? session.lastTarget : null;
       } else {
+        session.mainDocumentEpoch += 1;
         session.authorizationState = "unverified";
         session.authorizedTarget = null;
       }

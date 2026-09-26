@@ -583,6 +583,9 @@ export async function assertBrowserControlContract() {
   await releasePort.send(releaseSession, { method: "DOM.getDocument" });
   releaseTransport.emit("allowed", "Page.frameNavigated", { frame: { id: "child", parentId: "main",
     url: "http://elsewhere.test/frame" } });
+  const childRead = await releasePort.send(releaseSession, { method: "DOM.getDocument" });
+  assert(childRead.contextEpoch === 1 && childRead.mainDocumentEpoch === 0,
+    "child frame navigation changed the main document epoch");
   releaseTransport.emit("allowed", "Network.requestWillBeSent", { request: { url: "http://allowed.test/a" } });
   const heardAfterChild = releaseHeard.filter((method) => method === "Network.requestWillBeSent").length;
   releaseTransport.emit("allowed", "Runtime.executionContextsCleared", {});

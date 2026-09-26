@@ -1372,9 +1372,15 @@ export class BrowserAutomation {
         const status = await this._inspectTarget(sessionRef, prepared.target,
           browserActionabilityRequirements(prepared.bindingAction.kind), commandResults, signal, true);
         checkedDocumentEpoch = status.contextEpoch;
+        // A child frame can reload between preflight and send. Its global locator epoch changes, but the main
+        // document and this remote element can still be the same. A main-document replacement never gets this
+        // exception, and identity, geometry, hit target, and actionability are checked again below.
+        const sameMainDocument = Number.isInteger(status.mainDocumentEpoch)
+          && status.mainDocumentEpoch === prepared.status.mainDocumentEpoch;
         const unchanged = commandValue(identity) === true
-          && status.contextEpoch === prepared.status.contextEpoch
-          && browserActionabilityFingerprint(status) === browserActionabilityFingerprint(prepared.status)
+          && sameMainDocument
+          && browserActionabilityFingerprint({ ...status, contextEpoch: prepared.status.contextEpoch })
+            === browserActionabilityFingerprint(prepared.status)
           && !(status.reasons || []).length;
         if (!unchanged) {
           throw automationError(APX_ERROR_CODES.capabilityStale,
@@ -1449,6 +1455,7 @@ export class BrowserAutomation {
     }
     const status = commandValue(command) || {};
     status.contextEpoch = command.contextEpoch;
+    status.mainDocumentEpoch = command.mainDocumentEpoch;
     status.targetIdentity = target.objectId;
     if (target.frameChain?.length) await this._inspectFrameChain(sessionRef, target, status,
       commandResults, signal, trustedRead);
