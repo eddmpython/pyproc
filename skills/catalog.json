@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:e37450b1eba6057b18a5cd99eb1e111e9c970266410b202be0f81c9283dd1a95",
-  "catalogDigest": "sha256:8c8ae4bb00e3ae2df637859a6cc48c0daf9d020558f62b220efb6084ead0e791",
+  "generatedFromDigest": "sha256:fe111d55910cb3813af5bf3f6e155e36abbb44418246aa996970fb83d1eaf1ba",
+  "catalogDigest": "sha256:44578eccff898216590c7f4c9160d6414f0bb94bff2f3efbf49878e47d4af376",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -261,7 +261,7 @@
     {
       "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
       "bytes": 36027,
-      "sha256": "sha256:98336fe0f8b73718ed6fb365c2f161b548e0f16326a6307406053d455be427af"
+      "sha256": "sha256:50fd77749be7f70546ce186071bd0319a9ccaaf820980fc1566e366bbd697c26"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/frame-space.md",
@@ -296,12 +296,12 @@
     {
       "path": "skills/control-pyproc/references/javascript-control.md",
       "bytes": 15983,
-      "sha256": "sha256:6b249445fb78ccf9a68c65ca6535bfe55d9fdac3d10bbc8d39242550865d3961"
+      "sha256": "sha256:597730b191978a04ceb94b778b5c2b08da27a924c3b34544ea622a5a82e88862"
     },
     {
       "path": "skills/control-pyproc/references/python-sdk.md",
       "bytes": 20396,
-      "sha256": "sha256:76dd250fc403a06aa243df0965b09d70c65cf21c758fef544e674af8c559cc6d"
+      "sha256": "sha256:c59aaff071db08a0d75109636c980807da6bc303f44592ede68c48746b14759c"
     },
     {
       "path": "skills/develop-pyproc/references/module-boundaries.md",
@@ -406,7 +406,7 @@
     {
       "path": "skills/use-pyproc-machine/references/machine-entrance.md",
       "bytes": 9272,
-      "sha256": "sha256:6795b108749da4c75835b4bd460dc02af9a97313a191b582cff02f9f9e0e0d83"
+      "sha256": "sha256:34d5802ed7cb4d62cc2e47f2c84a9dfc3767d607e671f90551d37785f0c95b80"
     },
     {
       "path": "skills/use-pyproc-machine/references/machine-fleet.md",
