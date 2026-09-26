@@ -24,7 +24,7 @@ that execute it.
 Install and pin the package:
 
 ```sh
-npm install pyproc@0.0.32 --save-exact
+npm install pyproc@0.0.33 --save-exact
 ```
 
 From the project root, create the default closed profile:

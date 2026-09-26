@@ -34,10 +34,10 @@ Every release builds three Python distributions from the same commit:
 
 ```sh
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.32/pyproc_control-0.0.32-py3-none-win_amd64.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.33/pyproc_control-0.0.33-py3-none-win_amd64.whl"
 ```
 
-On Linux x64 install `pyproc_control-0.0.32-py3-none-manylinux_2_28_x86_64.whl` from the same release. The
+On Linux x64 install `pyproc_control-0.0.33-py3-none-manylinux_2_28_x86_64.whl` from the same release. The
 platform wheel is the whole product: `PyProcClient.start` uses its own host even when another `pyproc-control`
 is on `PATH`, because that host is the exact release this client was built with. The same commit always yields
 the same wheel bytes, the release's `python-distributions-manifest.json` lists each SHA-256, and every asset has
@@ -46,9 +46,9 @@ a GitHub build provenance attestation (`gh attestation verify <file> --repo eddm
 On other platforms, install the pure wheel and the npm package at the same exact version:
 
 ```sh
-npm install --save-exact pyproc@0.0.32
+npm install --save-exact pyproc@0.0.33
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.32/pyproc_control-0.0.32-py3-none-any.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.33/pyproc_control-0.0.33-py3-none-any.whl"
 ```
 
 PyPI is not an installation source yet. Use the exact-version asset URL because floating release URLs are

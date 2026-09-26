@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "pyproc User Browser",
   "description": "Lets a paired local pyproc control host work in one task window of this browser, with the debugging bar shown.",
-  "version": "0.0.32",
+  "version": "0.0.33",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvh5wW6eg2F8VB8sgzIW54TDPUbsbh2PE5aXF/8KhP4ZD/5OzcD+54dQJrHoR9QeEwJcFGzTiPoEDM/43CCyt7nxiiwMLUw4GJEOs5ct75RSdHs6KQ/GhxK2Hp73dALevIe1FTM0BdQJKiLIedBeSz/9FNbU0z993Jt401a5frEk1IrqmOLkWos6+CCJSke09rLwXKRy3Apwmw5+ZbPfTCrbz6CvpKiRkjgtQKEK7FzUAa0id7wBTlZNb7nIo/3RZKbBcrDayDLOUNi07wn+pVGJ+HYtL4F9/Iz8sc6xSC2VZDBGTea3U2v1IapJYL2LTBjte+TD8HRpd40YTomvZ8wIDAQAB",
   "minimum_chrome_version": "137",
   "permissions": [
