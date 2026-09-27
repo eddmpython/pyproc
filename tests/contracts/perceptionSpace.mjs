@@ -283,6 +283,7 @@ export async function assertPerceptionSpaceContract() {
   const focusedCalls = [];
   const focusedParams = [];
   const focusedSensor = new WebCdpSensor({
+    framePresent: async () => false,
     command: async (sessionRef, method, params) => {
       focusedCalls.push(method);
       focusedParams.push(params);
@@ -308,6 +309,7 @@ export async function assertPerceptionSpaceContract() {
 
   // native <summary>는 Chromium AX에서 DisclosureTriangle이다. 누르면 펼쳐지는 control이지 컨테이너가 아니다.
   const disclosureSensor = new WebCdpSensor({
+    framePresent: async () => false,
     command: async (sessionRef, method) => {
       if (method === "DOM.getDocument") return { contextEpoch: 7,
         target: { url: "https://disclosure.example/" }, result: { root: { nodeId: 1 } } };
@@ -328,18 +330,19 @@ export async function assertPerceptionSpaceContract() {
   "native summary(DisclosureTriangle)가 click을 지원하는 control로 분류되지 않았다");
 
   const fallbackCalls = [];
-  const fallbackSensor = new WebCdpSensor({ command: async (sessionRef, method) => {
-    fallbackCalls.push(method);
-    if (method === "DOM.getDocument") return { contextEpoch: 7, result: { root: { nodeId: 1 } } };
-    if (method === "Accessibility.queryAXTree") throw new Error("Accessibility.queryAXTree wasn't found");
-    if (method === "Accessibility.getFullAXTree") return { contextEpoch: 7,
-      target: { url: "https://fallback.example/app" }, result: { nodes: [] } };
-    if (method === "DOMSnapshot.captureSnapshot") return { contextEpoch: 7,
-      result: { strings: [], documents: [] } };
-    if (method === "Page.getLayoutMetrics") return { contextEpoch: 7,
-      result: { cssVisualViewport: { clientWidth: 800, clientHeight: 600 } } };
-    return { contextEpoch: 7, result: {} };
-  } });
+  const fallbackSensor = new WebCdpSensor({ framePresent: async () => false,
+    command: async (sessionRef, method) => {
+      fallbackCalls.push(method);
+      if (method === "DOM.getDocument") return { contextEpoch: 7, result: { root: { nodeId: 1 } } };
+      if (method === "Accessibility.queryAXTree") throw new Error("Accessibility.queryAXTree wasn't found");
+      if (method === "Accessibility.getFullAXTree") return { contextEpoch: 7,
+        target: { url: "https://fallback.example/app" }, result: { nodes: [] } };
+      if (method === "DOMSnapshot.captureSnapshot") return { contextEpoch: 7,
+        result: { strings: [], documents: [] } };
+      if (method === "Page.getLayoutMetrics") return { contextEpoch: 7,
+        result: { cssVisualViewport: { clientWidth: 800, clientHeight: 600 } } };
+      return { contextEpoch: 7, result: {} };
+    } });
   const fallbackFacts = await fallbackSensor.capture({ sessionId: "fallback" },
     { channels: ["semantic"] }, { postconditionPlan: focusedPlan });
   assert(fallbackFacts.enumeration.entities === "complete"

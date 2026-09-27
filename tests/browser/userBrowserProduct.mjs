@@ -44,9 +44,24 @@ async function waitFor(operation, timeoutMs = 20000) {
 }
 
 let effects = 0;
+let frameEffects = 0;
 const REPORT_PDF = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
   "latin1");
 const fixture = createServer((req, res) => {
+  if (req.url === "/frame-save" && req.method === "POST") {
+    frameEffects += 1;
+    res.writeHead(201, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ frameEffects }));
+    return;
+  }
+  if (req.url === "/frame") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(`<!doctype html><button id="frame-save">Frame Save</button><script>
+      document.getElementById("frame-save").onclick = (event) => {
+        if (event.isTrusted) void fetch("/frame-save", { method: "POST" });
+      };</script>`);
+    return;
+  }
   if (req.url === "/report.pdf") {
     res.writeHead(200, { "Content-Type": "application/pdf", "Content-Disposition": "attachment; filename=report.pdf",
       "Cache-Control": "no-store" });
@@ -69,6 +84,7 @@ const fixture = createServer((req, res) => {
 });
 await new Promise((resolve) => fixture.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${fixture.address().port}`;
+const frameOrigin = `http://localhost:${fixture.address().port}`;
 
 const key = randomBytes(32).toString("hex");
 const hostName = `com.pyproc.user_browser_gate_${randomBytes(4).toString("hex")}`;
@@ -231,8 +247,8 @@ async function journey({ kind, product, executable }, installed, app) {
   const engine = kind === "edge" ? { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") }
     : { enabled: false };
   await writeFile(configPath, JSON.stringify({ schemaVersion: 1, engine, timeoutMs: TIMEOUT_MS,
-    browser: { enabled: true, provider: "userBrowser", userBrowser: kind, allowedOrigins: [origin],
-      maxRisk: "externalEffect", actions: ["snapshot", "screenshot", "click"], methods: [],
+    browser: { enabled: true, provider: "userBrowser", userBrowser: kind, allowedOrigins: [origin, frameOrigin],
+      maxRisk: "externalEffect", actions: ["snapshot", "screenshot", "click"], methods: ["Runtime.evaluate"],
       externalEffects: "acknowledged", purpose: "Verify the user-browser provider fixture", artifacts: {},
       exportRoot: join(app.appDir, `exports-${kind}`) },
     executionMemory: { enabled: true, root: memoryRoot, importRoots: [], secretEnv: [] },
@@ -279,6 +295,26 @@ async function journey({ kind, product, executable }, installed, app) {
       && Buffer.compare(await readFile(receipt.exportedFile.path), REPORT_PDF) === 0,
     JSON.stringify({ receipt: receipt && { mimeType: receipt.mimeType, declared: receipt.declaredMimeType,
       exportedFile: receipt.exportedFile }, browserCopy: existsSync(browserCopy) }));
+  await client.command(task.sessionRef, "Runtime.evaluate", {
+    expression: `new Promise((resolve) => {
+      const frame = document.createElement('iframe');
+      frame.onload = () => resolve(true);
+      frame.src = ${JSON.stringify(`${frameOrigin}/frame`)};
+      document.body.append(frame);
+    })`, awaitPromise: true, returnByValue: true,
+  }, { expectedRisk: "externalEffect" });
+  const frameObserved = await client.observe(task.sessionRef, { expectedRisk: "read", mode: "all", maxNodes: 1000 });
+  const framePage = frameObserved.output.result || frameObserved.output;
+  const frameLocator = framePage.nodes?.find((node) => node.role === "button" && node.name === "Frame Save")?.locatorRef;
+  const frameBefore = frameEffects;
+  const frameClicked = frameLocator ? await client.act(task.sessionRef, [{ kind: "click", locatorRef: frameLocator,
+    expectedRisk: "externalEffect" }]) : null;
+  await waitFor(() => frameEffects === frameBefore + 1);
+  check(`${label}task tab's separate frame is read and receives one trusted click`,
+    framePage.framesComplete === true && !!frameLocator
+      && frameClicked?.output?.actions?.[0]?.result?.trusted === true && frameEffects === frameBefore + 1,
+  JSON.stringify({ complete: framePage.framesComplete, locator: !!frameLocator,
+    clicked: frameClicked?.output?.actions?.[0]?.result?.trusted, frameEffects }));
   const cleanup = await task.close();
   const remaining = await client.listTargets();
   check(`${label}closing the task detaches and closes the tab it opened, without retrying the effect`,

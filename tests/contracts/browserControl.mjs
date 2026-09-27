@@ -40,6 +40,8 @@ class FakeTransport {
     this.sessions = new Map();
     this.listeners = new Map();
     this.commands = [];
+    this.frameCommands = [];
+    this.framesByRoot = new Map();
     this.activations = [];
     this.failure = null;
     this.afterSend = null;
@@ -109,6 +111,20 @@ class FakeTransport {
     return Object.freeze({ ok: true, method: command.method });
   }
 
+  async frames(session) { return this.framesByRoot.get(session.targetId) || []; }
+
+  async describeFrame(session, frameId) {
+    const frame = (await this.frames(session)).find((item) => item.id === frameId);
+    if (!frame) throw new Error("frame unavailable");
+    return { ...frame };
+  }
+
+  async sendFrame(session, frameId, command) {
+    if (!(await this.frames(session)).some((frame) => frame.id === frameId)) throw new Error("frame unavailable");
+    this.frameCommands.push({ session, frameId, command });
+    return Object.freeze({ ok: true, method: command.method });
+  }
+
   subscribe(session, listener) {
     this.listeners.set(session.id, listener);
     return () => this.listeners.delete(session.id);
@@ -137,6 +153,10 @@ class FakeTransport {
       this.listeners.delete(id);
     }
     listener?.({ method, params });
+  }
+
+  emitFrame(targetId, frameId, method, params = {}) {
+    this.listeners.get(`raw:${targetId}`)?.({ method, params, frameId });
   }
 }
 
@@ -663,6 +683,58 @@ export async function assertBrowserControlContract() {
   assert(failedDetachRelease?.code === BROWSER_CONTROL_ERROR_CODES.outcomeUnknown
     && releaseTransport.closed && releaseTransport.sessions.size === 0,
   "interception 해제와 세션 분리가 모두 실패하면 transport를 닫아야 한다");
+
+  const frameTransport = new FakeTransport();
+  frameTransport.framesByRoot.set("allowed", [
+    { id: "frame-ok", parentId: "allowed", url: "http://allowed.test/child", loaderId: "one" },
+    { id: "frame-denied", parentId: "allowed", url: "http://denied.test/secret", loaderId: "two" },
+    { id: "frame-nested", parentId: "frame-denied", url: "http://allowed.test/nested", loaderId: "three" },
+  ]);
+  const framePort = new BrowserControlPort({ transport: frameTransport, policy: new BrowserControlPolicy({
+    targetOrigins: ["http://allowed.test"], methods: ["DOM.getDocument"], maxRisk: "read",
+  }) });
+  const [frameTarget] = await framePort.listTargets();
+  const frameSession = await framePort.attach(frameTarget.targetRef);
+  const visibleFrames = await framePort.frameTargets(frameSession);
+  assert(visibleFrames.total === 3 && visibleFrames.frames.length === 1
+    && visibleFrames.frames[0].id === "frame-ok", "권한 밖 자식과 그 자손은 frame 목록에서 숨겨야 한다");
+  const frameRead = await framePort.send(frameSession, { method: "DOM.getDocument" },
+    { frameId: "frame-ok", frameUrl: "http://allowed.test/child", frameLoaderId: "one" });
+  const beforeDeniedFrame = frameTransport.frameCommands.length;
+  const deniedFrame = await errorOf(() => framePort.send(frameSession, { method: "DOM.getDocument" },
+    { frameId: "frame-denied" }));
+  const deniedAncestor = await errorOf(() => framePort.send(frameSession, { method: "DOM.getDocument" },
+    { frameId: "frame-nested" }));
+  const rootStillVerified = framePort._requireSession(frameSession).authorizationState === "verified";
+  const frame = frameTransport.framesByRoot.get("allowed")[0];
+  frame.loaderId = "changed";
+  const staleFrame = await errorOf(() => framePort.send(frameSession, { method: "DOM.getDocument" },
+    { frameId: "frame-ok", frameUrl: "http://allowed.test/child", frameLoaderId: "one" }));
+  frame.loaderId = "one";
+  const describeFrame = frameTransport.describeFrame.bind(frameTransport);
+  let describeCount = 0;
+  frameTransport.describeFrame = async (...args) => {
+    const described = await describeFrame(...args);
+    if (++describeCount === 1) frame.loaderId = "raced";
+    return described;
+  };
+  const beforeRacedFrame = frameTransport.frameCommands.length;
+  const racedFrame = await errorOf(() => framePort.send(frameSession, { method: "DOM.getDocument" },
+    { frameId: "frame-ok", frameUrl: "http://allowed.test/child", frameLoaderId: "one" }));
+  frameTransport.emitFrame("allowed", "frame-ok", "Page.frameNavigated",
+    { frame: { id: "frame-ok", url: "http://allowed.test/next" } });
+  const rootAfterChild = await framePort.send(frameSession, { method: "DOM.getDocument" });
+  assert(frameRead.target.url === "http://allowed.test/child"
+    && frameTransport.frameCommands.length === beforeDeniedFrame
+    && deniedFrame?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied
+    && deniedAncestor?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied
+    && rootStillVerified
+    && staleFrame?.code === BROWSER_CONTROL_ERROR_CODES.contextReplaced
+    && racedFrame?.code === BROWSER_CONTROL_ERROR_CODES.contextReplaced
+    && frameTransport.frameCommands.length === beforeRacedFrame
+    && rootAfterChild.mainDocumentEpoch === 0 && rootAfterChild.contextEpoch === 1,
+  "frame 명령의 URL, 조상, 세대, 루트 문서 경계가 어긋났다");
+  await framePort.close();
 
   // The manifest opts a controller host in; other providers and unknown values are refused.
   const optInBase = { schemaVersion: 1, engine: { enabled: false }, browser: { enabled: true,

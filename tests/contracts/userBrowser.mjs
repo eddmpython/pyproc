@@ -30,7 +30,9 @@ class FakeConnection {
         { targetId: "9", url: "https://work.example/popup", title: "", openerId: "7" }] };
     }
     if (method === "PyprocUserBrowser.attachTab") return { sessionId: `userBrowser:${params.targetId}:1` };
-    if (method === "Page.getFrameTree") return { frameTree: { frame: { url: "https://work.example/" } } };
+    if (method === "Page.getFrameTree") return { frameTree: { frame: sessionId === "frame-wire"
+      ? { id: "frame-1", url: "https://work.example/frame", loaderId: "loader-1" }
+      : { url: "https://work.example/" } } };
     return {};
   }
   subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -78,12 +80,16 @@ export async function assertUserBrowserContract() {
     [fileURLToPath(new URL("../fixtures/userBrowserWorker.mjs", import.meta.url))],
     { timeout: 60000 }).toString());
   assert.deepEqual(boundaries, {
+    leftoverTaskTabDetached: true, unrelatedAttachedTabKept: true,
     lateHelloReplied: false, nextClientAuthorized: false, readyAcknowledged: [1, 2], tabsLeftAfterOpenRace: 0,
     handedOverStillAttached: false, eventReachedUnpairedClient: false, handedOverTabKept: true,
     pairingKeptAfterRequesterLeft: true, pairingRepliedToNextClient: false,
     refused: { "Page.close": true, "Page.navigateToHistoryEntry": true, "Page.navigate": true,
       "Network.getCookies": true, "Target.getTargets": true },
     navigateHttpAllowed: true, cookieHeadersForwarded: false, extraInfoForwarded: false, otherHeadersKept: true,
+    frameAutoAttachAllowed: true, broadAutoAttachRefused: true, frameCommandRouted: true,
+    frameEventScoped: true, workerNotRegistered: true, childDetachKeepsRoot: true,
+    detachedFrameRejected: true,
     unarmedDownloadReported: false, otherPageDownloadReported: false,
     taskDownload: [{ expectationMatches: true, state: "complete", path: "C:\\Downloads\\report.pdf",
       mimeType: "application/pdf" }],
@@ -109,17 +115,28 @@ export async function assertUserBrowserContract() {
     { id: "9", type: "page", url: "https://work.example/popup", title: "", openerId: "7" }]);
   const session = await transport.attach("7");
   assert.equal(session.id, "userBrowser:7:1");
-  assert.deepEqual(connection.sent.slice(-2).map((entry) => [entry.method, entry.sessionId]),
-    [["PyprocUserBrowser.attachTab", undefined], ["Page.enable", "userBrowser:7:1"]]);
+  assert.deepEqual(connection.sent.slice(-3).map((entry) => [entry.method, entry.sessionId]),
+    [["PyprocUserBrowser.attachTab", undefined], ["Page.enable", "userBrowser:7:1"],
+      ["Target.setAutoAttach", "userBrowser:7:1"]]);
   assert.deepEqual(await transport.describe(session), { id: "7", type: "page", url: "https://work.example/", title: "" });
   const seen = [];
   const unsubscribe = transport.subscribe(session, (event) => seen.push(event.method));
+  connection.emit({ method: "Target.attachedToTarget", sessionId: session.id,
+    params: { sessionId: "frame-wire", targetInfo: { type: "iframe", targetId: "frame-1" } } });
+  assert.deepEqual(await transport.frames(session), [{ id: "frame-1", parentId: "7",
+    url: "https://work.example/frame", loaderId: "loader-1" }]);
+  await transport.sendFrame(session, "frame-1", { method: "Accessibility.getFullAXTree" });
+  assert.equal(connection.sent.at(-1).sessionId, "frame-wire");
+  connection.emit({ method: "Target.detachedFromTarget", sessionId: session.id,
+    params: { sessionId: "frame-wire" } });
+  assert.deepEqual(await transport.frames(session), []);
   connection.emit({ method: "Page.frameNavigated", params: {}, sessionId: "userBrowser:7:1" });
   connection.emit({ method: "Page.frameNavigated", params: {}, sessionId: "userBrowser:9:1" });
   connection.emit({ method: "PyprocUserBrowser.detached", params: { sessionId: "userBrowser:7:1", reason: "canceled_by_user" },
     sessionId: null });
   unsubscribe();
-  assert.deepEqual(seen, ["Page.frameNavigated", "Transport.detached"]);
+  assert.deepEqual(seen, ["Transport.frameAttached", "Transport.frameDetached",
+    "Page.frameNavigated", "Transport.detached"]);
   const targets = userBrowserTargets(connection);
   assert.equal(await targets.create("about:blank"), undefined);
   assert.equal(connection.sent.at(-1).method, "PyprocUserBrowser.openTab");

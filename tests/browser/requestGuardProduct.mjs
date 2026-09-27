@@ -65,15 +65,15 @@ function pageFor(pathname, search) {
     return page(`<h1>Guard</h1>
 <form id="postForm" method="post" action="/sink/form-post"><input name="q" value="1"></form>
 <form id="getForm" method="get" action="/sink/get-form"><input name="q" value="1"></form>
-<iframe id="frame" src="${frameOrigin}/frame.html"></iframe>
-<iframe id="altFrame" src="${altFrameOrigin}/frame.html"></iframe>
+<iframe id="frame" src="${frameOrigin}/frame.html?proof=allowed-frame-proof"></iframe>
+<iframe id="altFrame" src="${altFrameOrigin}/frame.html?proof=outside-frame-proof"></iframe>
 <iframe name="sinkFrame"></iframe>
 <a id="pingLink" href="/sink/ping-target" ping="/sink/ping" target="sinkFrame">ping</a>
 <a id="crossLink" href="${frameOrigin}/guard-popup.html?via=link" target="_blank">cross-site tab</a>`);
   }
   if (pathname === "/frame.html") {
     // An out-of-process frame: its first script tries a socket, then an about:blank child's socket.
-    return page(`<p>frame</p><script>
+    return page(`<p>${search.get("proof") || "frame"}</p><script>
 fetch("/sink/frame-post", { method: "POST", body: "x" }).catch(() => {});
 fetch("/sink/frame-get").catch(() => {});
 const child = document.createElement("iframe");
@@ -344,6 +344,14 @@ try {
   const guarded = await session("safe");
   opened.push(guarded);
   await delay(1500);
+  const frameOutline = await guarded.observe();
+  const framePage = frameOutline.result || frameOutline;
+  check("read-only 별도 process iframe은 허용된 본문만 관찰",
+    framePage.framesComplete === false
+      && framePage.nodes?.some((node) => node.name === "allowed-frame-proof" && !!node.locatorRef)
+      && !framePage.nodes?.some((node) => node.name === "outside-frame-proof"),
+  JSON.stringify({ framesComplete: framePage.framesComplete,
+    names: framePage.nodes?.map((node) => node.name).filter(Boolean) }));
   // The guard's view right after the first page and its frames loaded, before later pages push it out.
   const early = (await guarded.run("automation.space.inspect", {})).requests;
   const outcome = await sendAll(guarded);

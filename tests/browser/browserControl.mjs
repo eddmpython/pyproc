@@ -55,7 +55,7 @@ const targetServer = createStaticServer(receiverHandler);
 const crossServer = createStaticServer(receiverHandler, {
   headers: { "Cross-Origin-Resource-Policy": "cross-origin" },
 });
-const deniedServer = createStaticServer();
+const deniedServer = createStaticServer(null, { headers: { "Cross-Origin-Resource-Policy": "cross-origin" } });
 await new Promise((resolve) => targetServer.listen(0, "127.0.0.1", resolve));
 await new Promise((resolve) => crossServer.listen(0, "127.0.0.1", resolve));
 await new Promise((resolve) => deniedServer.listen(0, "127.0.0.1", resolve));
@@ -64,7 +64,9 @@ const crossOrigin = `http://127.0.0.1:${crossServer.address().port}`;
 deniedOrigin = `http://127.0.0.1:${deniedServer.address().port}`;
 const targetUrl = `${targetOrigin}/tests/browser/browserControlTarget.html`;
 const crossFrameUrl = `${crossOrigin}/tests/browser/browserControlFrameTarget.html`;
+const oopifFrameUrl = crossFrameUrl.replace("127.0.0.1", "localhost");
 const deniedUrl = `${deniedOrigin}/tests/browser/browserControlFrameTarget.html`;
+const deniedFrameUrl = `${deniedOrigin}/tests/browser/deniedFrame.html`;
 
 const child = spawn(process.execPath, [join(ROOT, "scripts", "mcpSandboxServer.mjs")], {
   cwd: ROOT,
@@ -72,7 +74,7 @@ const child = spawn(process.execPath, [join(ROOT, "scripts", "mcpSandboxServer.m
   env: {
     ...process.env,
     PYPROC_BROWSER_CONTROL: "1",
-    PYPROC_BROWSER_ALLOWED_ORIGINS: `${targetOrigin},${crossOrigin}`,
+    PYPROC_BROWSER_ALLOWED_ORIGINS: `${targetOrigin},${crossOrigin},${new URL(oopifFrameUrl).origin}`,
     PYPROC_BROWSER_MAX_RISK: "externalEffect",
     PYPROC_BROWSER_ACTIONS: Object.keys(BROWSER_AUTOMATION_ACTIONS).join(","),
     PYPROC_BROWSER_EXTERNAL_EFFECTS: "acknowledged",
@@ -311,9 +313,22 @@ try {
     maxNodes: 100,
   }));
   const titleLocator = observed.result?.nodes?.find((node) => node.role === "textbox")?.locatorRef;
-  check("browserObserve가 한 command compact snapshot과 opaque locator를 반환", observed.requestCount === 1
+  const observeMethods = observed.trace?.steps?.[0]?.commands?.map((entry) => entry.method) || [];
+  check("browserObserve가 frame별 compact snapshot과 opaque locator를 반환",
+    observed.requestCount === observeMethods.length
+    && observeMethods.filter((method) => method === "Accessibility.getFullAXTree").length >= 2
+    && observeMethods.filter((method) => method === "Page.getFrameTree").length === 2
     && observed.result?.compactBytes * 2 <= observed.result?.rawBytes && !!titleLocator,
-  `${observed.result?.compactBytes}/${observed.result?.rawBytes}`);
+  `${observed.requestCount} commands, ${observed.result?.compactBytes}/${observed.result?.rawBytes}`);
+
+  const sameFrameObserved = toolText(await callTool("browserObserve", {
+    sessionRef,
+    expectedRisk: "read",
+    maxNodes: 1000,
+  }));
+  check("같은 process iframe 본문이 legacy semantic snapshot에 포함",
+    sameFrameObserved.result?.nodes?.some((node) => node.name === "Frame action"),
+  sameFrameObserved.result?.nodes?.filter((node) => node.name === "Frame action").length);
 
   const interactiveObserved = toolText(await callTool("browserObserve", {
     sessionRef,
@@ -507,6 +522,39 @@ try {
     expression: "document.getElementById('frame-action-overlay')?.remove()", returnByValue: true,
   }, "externalEffect");
 
+  const frameObserved = toolText(await callTool("browserObserve", {
+    sessionRef, expectedRisk: "read", maxNodes: 1000,
+  }));
+  const frameLocator = frameObserved.result?.nodes?.find((node) =>
+    node.role === "button" && node.name === "Frame action")?.locatorRef;
+  const frameClicked = frameLocator ? toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "click", locatorRef: frameLocator, expectedRisk: "externalEffect" }],
+  })) : null;
+  const frameClickedState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "window.browserControlFixture.actionability()", returnByValue: true,
+  }, "externalEffect"));
+  check("frame snapshot의 opaque locator가 같은 frame의 trusted click을 보냄",
+    frameClicked?.actions?.[0]?.result?.trusted === true
+      && frameClickedState.result?.result?.value?.counts?.frame === 3,
+  JSON.stringify({ action: frameClicked?.actions?.[0]?.result || null,
+    count: frameClickedState.result?.result?.value?.counts?.frame || null }));
+  await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: `new Promise((resolve) => {
+      const frame = document.getElementById('semantic-frame');
+      frame.onload = () => resolve(true);
+      frame.srcdoc = '<button>replaced-frame</button>';
+    })`, awaitPromise: true, returnByValue: true,
+  }, "externalEffect");
+  const staleFrameAction = await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "click", locatorRef: frameLocator, expectedRisk: "externalEffect" }],
+  });
+  check("iframe 이동 뒤 옛 locator는 effect 전 stale 거절",
+    staleFrameAction.result.isError === true
+      && toolText(staleFrameAction).code === "BROWSER_AUTOMATION_STALE_LOCATOR",
+  JSON.stringify(toolText(staleFrameAction)));
+
   receiverRequests = 0;
   receiverBody = null;
   await browserCommand(sessionRef, "Runtime.evaluate", {
@@ -536,6 +584,60 @@ try {
     actionability: crossFrameAction.actionability || null,
     commands: crossFrameAction.trace?.steps?.[0]?.commands?.map((command) => command.method) || [],
   })}`);
+
+  await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: `new Promise((resolve) => {
+      const frame = document.getElementById('cross-origin-frame');
+      frame.onload = () => resolve(true);
+      frame.src = ${JSON.stringify(oopifFrameUrl)};
+    })`, awaitPromise: true, returnByValue: true,
+  }, "externalEffect");
+  const oopifObserved = toolText(await callTool("browserObserve", {
+    sessionRef, expectedRisk: "read", maxNodes: 1000,
+  }));
+  const oopifLocator = oopifObserved.result?.nodes?.find((node) => node.role === "button"
+    && node.name === "Cross frame action")?.locatorRef;
+  check("별도 process의 허용된 iframe 본문을 관찰",
+    oopifObserved.result?.framesComplete === true
+      && !!oopifLocator,
+  JSON.stringify({ complete: oopifObserved.result?.framesComplete,
+    names: oopifObserved.result?.nodes?.map((node) => node.name).filter(Boolean).slice(-8) }));
+  receiverRequests = 0;
+  receiverBody = null;
+  const oopifClick = oopifLocator ? toolText(await callTool("browserAct", {
+    sessionRef, actions: [{ kind: "click", locatorRef: oopifLocator, expectedRisk: "externalEffect" }],
+  })) : null;
+  const oopifDeadline = Date.now() + 5000;
+  while (Date.now() < oopifDeadline && receiverBody?.marker !== "cross-frame") await delay(25);
+  check("별도 process iframe의 opaque locator가 trusted click을 보냄",
+    oopifClick?.actions?.[0]?.result?.trusted === true && receiverRequests === 1
+      && receiverBody?.payload?.trusted === true,
+  JSON.stringify({ action: oopifClick?.actions?.[0]?.result || oopifClick, receiverBody }));
+
+  await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: `new Promise((resolve) => {
+      const frame = document.getElementById('cross-origin-frame');
+      frame.onload = () => resolve(true);
+      frame.src = ${JSON.stringify(deniedFrameUrl)};
+    })`, awaitPromise: true, returnByValue: true,
+  }, "externalEffect");
+  const beforeStaleClick = receiverRequests;
+  const staleOopifClick = await callTool("browserAct", {
+    sessionRef, actions: [{ kind: "click", locatorRef: oopifLocator, expectedRisk: "externalEffect" }],
+  });
+  check("별도 process iframe 이동 뒤 옛 locator는 effect 전 거절",
+    staleOopifClick.result.isError === true
+      && toolText(staleOopifClick).code === "BROWSER_AUTOMATION_STALE_LOCATOR"
+      && receiverRequests === beforeStaleClick,
+  JSON.stringify({ code: toolText(staleOopifClick).code, requests: receiverRequests }));
+  const deniedFrameObserved = toolText(await callTool("browserObserve", {
+    sessionRef, expectedRisk: "read", maxNodes: 1000,
+  }));
+  check("권한 밖 iframe의 본문은 legacy snapshot에 포함되지 않음",
+    deniedFrameObserved.result?.framesComplete === false
+      && !deniedFrameObserved.result?.nodes?.some((node) => node.name?.includes("denied-secret-marker")),
+  JSON.stringify({ complete: deniedFrameObserved.result?.framesComplete,
+    nodes: deniedFrameObserved.result?.nodes?.length }));
 
   const controlActions = toolText(await callTool("browserAct", {
     sessionRef,

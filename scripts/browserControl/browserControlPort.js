@@ -452,7 +452,65 @@ export class BrowserControlPort {
     }
   }
 
-  async send(sessionRef, command, { signal, trustedRead = false } = {}) {
+  async frameTargets(sessionRef) {
+    this._requireOpen();
+    const session = this._requireSession(sessionRef);
+    await this._describe(session);
+    if (typeof this._transport.frames !== "function") {
+      return Object.freeze({ rootId: session.targetId, frames: Object.freeze([]), total: 0 });
+    }
+    const children = await this._transport.frames(session.transportSession);
+    const byId = new Map(children.map((frame) => [frame.id, frame]));
+    const allowed = new Map();
+    const permits = (frame, seen = new Set()) => {
+      if (allowed.has(frame.id)) return true;
+      if (seen.has(frame.id) || !this.policy.allowsTarget({ id: frame.id, type: "page", url: frame.url, title: "" })) return false;
+      seen.add(frame.id);
+      if (frame.parentId !== session.targetId) {
+        const parent = byId.get(frame.parentId);
+        if (!parent || !permits(parent, seen)) return false;
+      }
+      allowed.set(frame.id, frame);
+      return true;
+    };
+    for (const frame of children) permits(frame);
+    return Object.freeze({ rootId: session.targetId,
+      frames: Object.freeze([...allowed.values()].map((frame) => Object.freeze({ ...frame }))),
+      total: children.length });
+  }
+
+  async _describeFrame(session, frameId) {
+    if (typeof this._transport.describeFrame !== "function") {
+      throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable, "browser frame transport is unavailable");
+    }
+    const seen = new Set();
+    let id = frameId;
+    let selected = null;
+    while (id !== session.targetId) {
+      if (seen.has(id) || seen.size >= 16) {
+        throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied, "browser frame ancestry is invalid");
+      }
+      seen.add(id);
+      let frame;
+      try { frame = await this._transport.describeFrame(session.transportSession, id); }
+      catch (error) {
+        throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
+          "browser child frame is unavailable", { cause: error });
+      }
+      if (!frame || frame.id !== id || !frame.parentId) {
+        throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable, "browser child frame identity changed");
+      }
+      const target = Object.freeze({ id, type: "page", url: frame.url, title: "" });
+      this._authorizeTarget(target);
+      if (!selected) selected = { frame, target };
+      id = frame.parentId;
+    }
+    if (!selected) throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable, "browser child frame is unavailable");
+    return selected;
+  }
+
+  async send(sessionRef, command, { signal, trustedRead = false, frameId = null,
+    frameUrl = undefined, frameLoaderId = undefined } = {}) {
     this._requireOpen();
     validateSignal(signal);
     const session = this._requireSession(sessionRef);
@@ -464,6 +522,7 @@ export class BrowserControlPort {
         `browser command was cancelled before send: ${command.method}`);
     }
     let target = null;
+    let frameTarget = null;
     const release = !trustedRead && releasesInterception(command);
     if (release) {
       // A release names no surface it has not verified: a held or unverified page is never described in its result.
@@ -476,13 +535,31 @@ export class BrowserControlPort {
       }
       target = session.authorizedTarget;
     } else {
+      let root;
       try {
-        target = await this._describe(session);
-        session.authorizationState = "verified";
-        session.authorizedTarget = target;
+        root = await this._describe(session);
       } catch (error) {
         session.authorizationState = error?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld ? "held" : "unverified";
         throw error;
+      }
+      session.authorizationState = "verified";
+      session.authorizedTarget = root;
+      if (frameId === null) target = root;
+      else {
+        frameTarget = await this._describeFrame(session, frameId);
+        target = frameTarget.target;
+      }
+    }
+    if (frameId !== null) {
+      if (release || command.method === MODAL_UNBLOCK_METHOD) {
+        throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+          "browser frame cannot release root interception");
+      }
+      const { frame } = frameTarget;
+      if ((frameUrl !== undefined && frame.url !== frameUrl)
+        || (frameLoaderId !== undefined && frame.loaderId !== frameLoaderId)) {
+        throw this._error(BROWSER_CONTROL_ERROR_CODES.contextReplaced,
+          "browser child frame changed before command", { retryable: true });
       }
     }
     let risk;
@@ -507,9 +584,20 @@ export class BrowserControlPort {
       throw this._error(BROWSER_CONTROL_ERROR_CODES.commandCancelled,
         `browser command was cancelled before send: ${command.method}`);
     }
+    if (frameId !== null) {
+      const current = (await this._describeFrame(session, frameId)).frame;
+      if (current.url !== frameTarget.frame.url || current.loaderId !== frameTarget.frame.loaderId
+        || current.parentId !== frameTarget.frame.parentId) {
+        throw this._error(BROWSER_CONTROL_ERROR_CODES.contextReplaced,
+          "browser child frame changed before command", { retryable: true });
+      }
+    }
     const requestId = `${this.brokerId}:${this._brokerEpoch}:${++this._requestSeq}`;
     try {
-      const result = await this._transport.send(session.transportSession, {
+      const transportSend = frameId === null ? this._transport.send.bind(this._transport, session.transportSession)
+        : this._transport.sendFrame?.bind(this._transport, session.transportSession, frameId);
+      if (!transportSend) throw new Error("browser frame transport is unavailable");
+      const result = await transportSend({
         method: command.method,
         params,
       }, { signal });
@@ -684,6 +772,16 @@ export class BrowserControlPort {
 
   _receiveEvent(session, event) {
     if (session.state !== "attached" || !event || typeof event.method !== "string") return;
+    if (event.frameId) {
+      if (["Transport.frameAttached", "Transport.frameDetached", "Runtime.executionContextsCleared", "Page.frameNavigated"].includes(event.method)) {
+        session.contextEpoch += 1;
+        const normalized = Object.freeze({ sequence: ++this._eventSeq, method: "Transport.contextReplaced",
+          params: Object.freeze({ sourceMethod: event.method, contextEpoch: session.contextEpoch,
+            frameId: event.frameId }), sessionRef: this._sessionRef(session) });
+        for (const listener of [...session.listeners]) listener(normalized);
+      }
+      return;
+    }
     let method = event.method;
     let params = event.params || {};
     if (method === "Runtime.executionContextsCleared" || method === "Page.frameNavigated") {

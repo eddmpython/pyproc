@@ -168,6 +168,7 @@ export class RequestGuard {
     this._dropped = 0;
     this._blockedTotal = 0;
     this._guarded = new Set();
+    this._targetSessions = new Map();
     this._issues = new Set();
     // Targets attached but not yet guarded and released, and requests paused but not yet decided: a guard that stalls
     // shows here instead of as a page that silently never runs.
@@ -186,6 +187,12 @@ export class RequestGuard {
   _onEvent(event) {
     if (event.method === "Target.attachedToTarget") {
       const { sessionId, targetInfo, waitingForDebugger } = event.params || {};
+      const parent = this._targetSessions.get(event.sessionId);
+      if (sessionId && targetInfo?.targetId) {
+        this._targetSessions.set(sessionId, Object.freeze({ id: sessionId, targetId: targetInfo.targetId,
+          type: targetInfo.type, parentId: parent?.targetId || "",
+          rootTargetId: targetInfo.type === "page" ? targetInfo.targetId : parent?.rootTargetId || "" }));
+      }
       void this._guardTarget(sessionId, targetInfo || {}, !!waitingForDebugger);
     } else if (event.method === "Fetch.requestPaused") {
       const params = event.params || {};
@@ -211,6 +218,19 @@ export class RequestGuard {
       const detached = event.params?.sessionId;
       this._guarded.delete(detached);
       this._pending.delete(detached);
+      const removed = this._targetSessions.get(detached);
+      if (removed) {
+        const descendants = [removed.targetId];
+        this._targetSessions.delete(detached);
+        for (let index = 0; index < descendants.length; index += 1) {
+          for (const [id, target] of this._targetSessions) {
+            if (target.parentId !== descendants[index]) continue;
+            descendants.push(target.targetId);
+            this._targetSessions.delete(id);
+            this._guarded.delete(id);
+          }
+        }
+      }
       if (detached) {
         this._detached.add(detached);
         if (this._detached.size > ISSUES_KEEP) this._detached.delete(this._detached.values().next().value);
@@ -418,6 +438,14 @@ export class RequestGuard {
     return drained;
   }
 
+  frameSessions(rootTargetId) {
+    return Object.freeze([...this._targetSessions.values()]
+      .filter((target) => target.type === "iframe" && target.rootTargetId === rootTargetId
+        && this._guarded.has(target.id))
+      .map((target) => Object.freeze({ id: target.id, targetId: target.targetId,
+        parentId: target.parentId })));
+  }
+
   inspect() {
     return Object.freeze({ mode: "safe", guardedSessions: this._guarded.size, blockedTotal: this._blockedTotal,
       refusedTargets: this._refused.length, refusals: [...this._refused],
@@ -429,5 +457,6 @@ export class RequestGuard {
   close() {
     this._unsubscribe?.();
     this._unsubscribe = null;
+    this._targetSessions.clear();
   }
 }

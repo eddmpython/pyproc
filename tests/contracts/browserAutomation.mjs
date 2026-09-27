@@ -78,6 +78,8 @@ class FakePort {
   }
   cancelPopupCapture() {}
 
+  async frameTargets() { return { rootId: "fake-root", frames: [], total: 0 }; }
+
   async send(ref, command, { signal } = {}) {
     if (signal?.aborted) {
       const error = new Error("cancelled");
@@ -863,8 +865,11 @@ export async function assertBrowserAutomationContract() {
     close() {},
   });
   const transportSession = await transport.attach("raw-target");
-  assert(connectionCalls.map((entry) => entry.method).join(",") === "Target.attachToTarget,Page.enable",
-    "transport attach가 locator epoch용 Page event를 활성화하지 않았다");
+  assert(connectionCalls.map((entry) => entry.method).join(",")
+    === "Target.attachToTarget,Page.enable,Target.setAutoAttach"
+    && connectionCalls[2].params.filter?.length === 1
+    && connectionCalls[2].params.filter[0].type === "iframe",
+  "transport attach가 Page event와 iframe 자식 세션을 활성화하지 않았다");
   connectionCalls.length = 0;
   await transport.describe(transportSession);
   assert(connectionCalls.map((entry) => entry.method).join(",") === "Page.getFrameTree",

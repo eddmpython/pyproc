@@ -123,6 +123,30 @@ function stringAt(strings, index) {
   return Number.isInteger(index) && index >= 0 && index < strings.length ? strings[index] : "";
 }
 
+function authorizedDocuments(snapshot, rootUrl, frameAllowed) {
+  const documents = snapshot.documents || [];
+  const strings = snapshot.strings || [];
+  const parents = new Map();
+  for (const [index, document] of documents.entries()) {
+    for (const child of document.nodes?.contentDocumentIndex?.value || []) parents.set(child, index);
+  }
+  const checked = new Map([[0, rootUrl]]);
+  const effectiveUrl = (index, visiting = new Set()) => {
+    if (checked.has(index)) return checked.get(index);
+    if (visiting.has(index) || !Number.isInteger(index) || index < 1 || index >= documents.length) return "";
+    visiting.add(index);
+    const parentUrl = effectiveUrl(parents.get(index), visiting);
+    visiting.delete(index);
+    const url = stringAt(strings, documents[index].documentURL);
+    const candidate = /^about:(?:blank|srcdoc)$/.test(url) ? parentUrl : url;
+    const allowed = parentUrl && frameAllowed(candidate) ? candidate : "";
+    checked.set(index, allowed);
+    return allowed;
+  };
+  const selected = documents.filter((document, index) => index === 0 || !!effectiveUrl(index));
+  return { documents: selected, filtered: selected.length !== documents.length };
+}
+
 function rareMap(data, valueAt = (value) => value) {
   const output = new Map();
   for (let index = 0; index < (data?.index || []).length; index += 1) {
@@ -424,15 +448,22 @@ function focusedUnsupported(error) {
 }
 
 export class WebCdpSensor {
-  constructor({ command, eventCapture = null, environmentCommand = null } = {}) {
+  constructor({ command, eventCapture = null, environmentCommand = null,
+    frameAllowed = () => false, framePresent = null } = {}) {
     if (typeof command !== "function") throw new TypeError("WebCdpSensor command is required");
     if (eventCapture !== null && typeof eventCapture !== "function") throw new TypeError("WebCdpSensor eventCapture is invalid");
     if (environmentCommand !== null && typeof environmentCommand !== "function") {
       throw new TypeError("WebCdpSensor environmentCommand is invalid");
     }
+    if (typeof frameAllowed !== "function") throw new TypeError("WebCdpSensor frameAllowed is invalid");
+    if (framePresent !== null && typeof framePresent !== "function") {
+      throw new TypeError("WebCdpSensor framePresent is invalid");
+    }
     this.command = command;
     this.eventCapture = eventCapture;
     this.environmentCommand = environmentCommand || command;
+    this.frameAllowed = frameAllowed;
+    this.framePresent = framePresent;
     this.enabledSessions = new Set();
     this.focusedSupport = new Map();
     this.evidenceWorlds = new Map();
@@ -443,9 +474,21 @@ export class WebCdpSensor {
   // name, and then cannot make content inert with it either, so the snapshot goes on without it.
   async _snapshot(sessionRef, context) {
     try {
-      return await this.command(sessionRef, "DOMSnapshot.captureSnapshot", {
+      const command = await this.command(sessionRef, "DOMSnapshot.captureSnapshot", {
         computedStyles: this.snapshotStyles, includePaintOrder: true, includeDOMRects: true,
       }, context.commandResults || [], context.signal);
+      const filtered = authorizedDocuments(command.result || {}, command.target?.url || "", this.frameAllowed);
+      const documents = command.result?.documents || [];
+      const strings = command.result?.strings || [];
+      let hosts = 0;
+      for (const document of documents) {
+        for (const name of document.nodes?.nodeName || []) if (stringAt(strings, name) === "IFRAME") hosts += 1;
+      }
+      // Full AX is read only for the root document. Even a DOMSnapshot child document has no
+      // corresponding child AX tree in this capture, so frame observations remain incomplete.
+      const frameIncomplete = filtered.filtered || hosts > 0;
+      return frameIncomplete ? { ...command,
+        result: { ...command.result, documents: filtered.documents }, frameFiltered: true } : command;
     } catch (error) {
       const refused = /invalid CSS property/i.test(`${error?.message || ""} ${error?.cause?.message || ""}`);
       if (!refused || !this.snapshotStyles.includes("interactivity")) throw error;
@@ -478,7 +521,8 @@ export class WebCdpSensor {
       }
     }
     let evidence = null;
-    if (pageState !== null && !closedRoot && customElements.length <= EVIDENCE_CUSTOM_ELEMENTS) {
+    if (pageState !== null && !domCommand.frameFiltered && !closedRoot
+      && customElements.length <= EVIDENCE_CUSTOM_ELEMENTS) {
       const hash = createHash("sha256").update(`${Number(domCommand.contextEpoch) || 0}|`).update(pageState).update("|");
       for (const backendNodeId of customElements) {
         const partial = await this.environmentCommand(sessionRef, "Accessibility.getPartialAXTree", {
@@ -523,6 +567,16 @@ export class WebCdpSensor {
     return null;
   }
 
+  async _framePresent(sessionRef, context) {
+    if (!this.framePresent) return true;
+    try {
+      return (await this.framePresent(sessionRef, context.commandResults || [], context.signal)) !== false;
+    } catch (error) {
+      if (error?.code === "BROWSER_CONTROL_COMMAND_CANCELLED" || context.signal?.aborted) throw error;
+      return true;
+    }
+  }
+
   async capture(sessionRef, options, context = {}) {
     const plan = context.postconditionPlan;
     if (plan?.networkOnly) return this._captureFocused(sessionRef, options, context, []);
@@ -531,13 +585,16 @@ export class WebCdpSensor {
       await this.command(sessionRef, "Accessibility.enable", {}, context.commandResults || [], context.signal);
       this.enabledSessions.add(key);
     }
-    if (plan?.entityQueries?.length && this.focusedSupport.get(key) !== "unsupported") {
+    if (plan?.entityQueries?.length && this.focusedSupport.get(key) !== "unsupported"
+      && !(await this._framePresent(sessionRef, context))) {
       const queries = plan.entityQueries.map(focusedQueryParams);
       if (queries.every(Boolean)) {
         try {
           const focused = await this._captureFocused(sessionRef, options, context, queries);
-          this.focusedSupport.set(key, "supported");
-          return focused;
+          if (!(await this._framePresent(sessionRef, context))) {
+            this.focusedSupport.set(key, "supported");
+            return focused;
+          }
         } catch (error) {
           if (!focusedUnsupported(error)) throw error;
           this.focusedSupport.set(key, "unsupported");
@@ -714,9 +771,12 @@ export class WebCdpSensor {
       relations: Object.freeze(relations),
       events: Object.freeze([...(capturedEvents.console || []), ...(capturedEvents.network || [])]),
       eventWindows: Object.freeze([...(capturedEvents.eventWindows || [])]),
-      enumeration: Object.freeze({ entities: "complete" }),
-      completeness: Object.freeze({ semantic: "complete", structure: "complete", geometry: "complete",
-        interaction: "complete", network: options.channels.includes("networkMetadata") ? "metadata-only" : "notRequested",
+      enumeration: Object.freeze({ entities: domCommand.frameFiltered ? "incomplete" : "complete" }),
+      completeness: Object.freeze({ semantic: domCommand.frameFiltered ? "partial" : "complete",
+        structure: domCommand.frameFiltered ? "partial" : "complete",
+        geometry: domCommand.frameFiltered ? "partial" : "complete",
+        interaction: domCommand.frameFiltered ? "partial" : "complete",
+        network: options.channels.includes("networkMetadata") ? "metadata-only" : "notRequested",
         environment: options.channels.includes("environment") ? "complete" : "notRequested" }),
     });
   }

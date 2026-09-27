@@ -17,9 +17,15 @@ const server = createStaticServer(async (request, response) => {
   response.end('{"saved":true}');
   return true;
 });
+const deniedServer = createStaticServer(null, { headers: { "Cross-Origin-Resource-Policy": "cross-origin" } });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+await new Promise((resolve) => deniedServer.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const targetUrl = `${origin}/tests/browser/apxProduct.html`;
+const deniedFrameUrl = `http://127.0.0.1:${deniedServer.address().port}/tests/browser/deniedFrame.html`;
+const sameFrameUrl = `${origin}/tests/browser/browserControlFrameTarget.html`;
+const separateOrigin = `http://localhost:${deniedServer.address().port}`;
+const separateFrameUrl = `${separateOrigin}/tests/browser/browserControlFrameTarget.html`;
 
 let browser = null;
 let broker = null;
@@ -37,11 +43,12 @@ try {
   browser = launchBrowser("about:blank", {
     prefix: "pyprocApxProductProbe-",
     cdpPipe: true,
+    extraArgs: ["--disable-features=LocalNetworkAccessChecks"],
   });
   const actionNames = ["snapshot", "screenshot", "click"];
   broker = await connectNodeBrowserControl({
     cdpPipe: browser.cdpPipe,
-    targetOrigins: [origin],
+    targetOrigins: [origin, separateOrigin],
     methods: [...new Set(actionNames.flatMap((name) => BROWSER_AUTOMATION_ACTIONS[name].methods))],
     events: [...new Set(actionNames.flatMap((name) => BROWSER_AUTOMATION_ACTIONS[name].events))],
     maxRisk: "externalEffect",
@@ -204,6 +211,91 @@ try {
   JSON.stringify({ state: archiveSituation.requirements[0]?.state, unknowns: archiveSituation.unknowns,
     control: archiveControl?.semantic, text: archiveText?.interaction }));
 
+  await broker.command(sessionRef, { method: "Runtime.evaluate", params: {
+    expression: `new Promise((resolve) => {
+      const frame = document.createElement('iframe');
+      frame.onload = () => resolve(true);
+      frame.src = ${JSON.stringify(sameFrameUrl)};
+      document.body.append(frame);
+    })`, awaitPromise: true, returnByValue: true,
+  }, expectedRisk: "externalEffect" });
+  const rawSameDom = await broker.command(sessionRef, { method: "DOMSnapshot.captureSnapshot", params: {
+    computedStyles: APX_WEB_COMPUTED_STYLES, includePaintOrder: true, includeDOMRects: true,
+  }, expectedRisk: "read" });
+  check("허용된 같은 process frame의 DOM 문서가 실제 fixture에 포함",
+    rawSameDom.result.documents.some((document) => rawSameDom.result.strings[document.documentURL] === sameFrameUrl));
+  const sameGraphRun = await automation.observe(sessionRef, {
+    representation: "apx.graph", visual: { mode: "off" },
+    budget: { maxEntities: 1000, maxRelations: 1000, maxBytes: 1024 * 1024 },
+  });
+  const sameGraph = sameGraphRun.result;
+  check("허용된 같은 process frame의 AX 미수집은 APX 완전성을 낮춤",
+    ["semantic", "structure", "geometry", "interaction"].every((part) => sameGraph.completeness?.[part] === "partial"),
+    JSON.stringify(sameGraph.completeness));
+  const repeatedFrameRun = await automation.observe(sessionRef, {
+    representation: "apx.graph", visual: { mode: "off" },
+    budget: { maxEntities: 1000, maxRelations: 1000, maxBytes: 1024 * 1024 },
+  });
+  check("frame가 있는 APX는 이전 증거를 완전 관찰로 재사용하지 않음",
+    repeatedFrameRun.trace.steps[0].commands.some((command) => command.method === "Accessibility.getFullAXTree"));
+  const frameLegacy = (await automation.observe(sessionRef, { mode: "all", maxNodes: 100 })).result;
+  const rootControl = frameLegacy.nodes.find((node) => node.role === "DisclosureTriangle"
+    && node.name === "내 기록과 보관");
+  const frameAction = rootControl && await automation.run(sessionRef, [{
+    kind: "click", locatorRef: rootControl.locatorRef, expectedRisk: "externalEffect",
+    verify: { entityAppeared: { role: "status", nameContains: "never-appears" }, withinMs: 300 },
+  }]);
+  check("frame가 있는 확인 경로는 focused 완전성 주장을 피함",
+    frameAction?.actions[0]?.result?.evidence?.observationCoverage?.entityEnumeration === "unknown"
+      && frameAction.actions[0].result.evidence.verification.state === "ambiguous"
+      && frameAction.trace.steps[0].commands.some((command) => command.method === "DOMSnapshot.captureSnapshot"),
+    JSON.stringify({ coverage: frameAction?.actions[0]?.result?.evidence?.observationCoverage,
+      verification: frameAction?.actions[0]?.result?.evidence?.verification }));
+
+  await broker.command(sessionRef, { method: "Runtime.evaluate", params: {
+    expression: `new Promise((resolve) => {
+      const frame = document.createElement('iframe');
+      frame.onload = () => resolve(true);
+      frame.src = ${JSON.stringify(separateFrameUrl)};
+      document.body.append(frame);
+    })`, awaitPromise: true, returnByValue: true,
+  }, expectedRisk: "externalEffect" });
+  const separateFrames = await broker.port.frameTargets(sessionRef);
+  check("APX fixture가 별도 process frame을 실제 연결",
+    separateFrames.frames.some((frame) => frame.url === separateFrameUrl), JSON.stringify(separateFrames));
+  const separateGraph = (await automation.observe(sessionRef, {
+    representation: "apx.graph", visual: { mode: "off" },
+    budget: { maxEntities: 1000, maxRelations: 1000, maxBytes: 1024 * 1024 },
+  })).result;
+  check("별도 process frame의 AX 미수집도 APX가 partial로 보고",
+    separateGraph.completeness?.semantic === "partial"
+      && separateGraph.completeness?.interaction === "partial",
+    JSON.stringify(separateGraph.completeness));
+
+  await broker.command(sessionRef, { method: "Runtime.evaluate", params: {
+    expression: `new Promise((resolve) => {
+      const frame = document.createElement('iframe');
+      frame.onload = () => resolve(true);
+      frame.src = ${JSON.stringify(deniedFrameUrl)};
+      document.body.append(frame);
+    })`, awaitPromise: true, returnByValue: true,
+  }, expectedRisk: "externalEffect" });
+  const rawDeniedDom = await broker.command(sessionRef, { method: "DOMSnapshot.captureSnapshot", params: {
+    computedStyles: APX_WEB_COMPUTED_STYLES, includePaintOrder: true, includeDOMRects: true,
+  }, expectedRisk: "read" });
+  const deniedDocumentUrls = rawDeniedDom.result.documents.map((document) =>
+    rawDeniedDom.result.strings[document.documentURL]);
+  check("거부 frame이 DOMSnapshot 재현 fixture에 실제 포함", deniedDocumentUrls.includes(deniedFrameUrl),
+    JSON.stringify(deniedDocumentUrls));
+  const deniedGraph = (await automation.observe(sessionRef, {
+    representation: "apx.graph", visual: { mode: "off" },
+    budget: { maxEntities: 1000, maxRelations: 1000, maxBytes: 1024 * 1024 },
+  })).result;
+  check("권한 밖 iframe의 DOMSnapshot entity가 APX에 노출되지 않음",
+    !deniedGraph.entities.some((entity) => entity.semantic?.role === "canvas")
+      && !JSON.stringify(deniedGraph).includes("denied-secret-marker"),
+  JSON.stringify(deniedGraph.entities.filter((entity) => entity.semantic?.role === "canvas")));
+
   await broker.detach(sessionRef);
 } catch (error) {
   check("gate 예외 없음", false, String(error?.stack || error).slice(0, 700));
@@ -213,6 +305,7 @@ try {
   try { await broker?.close(); } catch (error) {}
   try { browser?.close(); } catch (error) {}
   await new Promise((resolve) => server.close(resolve));
+  await new Promise((resolve) => deniedServer.close(resolve));
 }
 
 console.log(`결과: ${failed === 0 ? "GREEN" : "RED"} (${passed}/${passed + failed})`);

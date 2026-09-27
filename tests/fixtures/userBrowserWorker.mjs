@@ -13,6 +13,10 @@ let nextTab = 100;
 let nextWindow = 10;
 const tabs = new Map();
 const attached = new Set();
+attached.add(600);
+attached.add(700);
+const sessionStore = { task: { windowId: null, created: [], attached: [600] } };
+const sentCommands = [];
 const port = { onMessage: listeners(), onDisconnect: listeners(), postMessage: (message) => posted.push(message) };
 const events = { action: listeners(), created: listeners(), attachedTab: listeners(), detachedTab: listeners(),
   removed: listeners(), windowRemoved: listeners(), focus: listeners(), debuggerEvent: listeners(), debuggerDetach: listeners(),
@@ -21,7 +25,8 @@ const downloadItems = new Map();
 globalThis.chrome = {
   runtime: { connectNative: () => port, id: "fixture" },
   storage: {
-    session: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+    session: { get: async () => ({ ...sessionStore }), set: async (values) => Object.assign(sessionStore, values),
+      remove: async (key) => { delete sessionStore[key]; } },
     local: { get: async (key) => { await tick(5); return { [key]: store[key] }; },
       set: async (values) => Object.assign(store, values), remove: async (key) => { delete store[key]; } },
   },
@@ -59,7 +64,7 @@ globalThis.chrome = {
     getTargets: async () => [],
     attach: async ({ tabId }) => { await tick(30); attached.add(tabId); },
     detach: async ({ tabId }) => { await tick(5); attached.delete(tabId); },
-    sendCommand: async (_target, method) => ({ method }),
+    sendCommand: async (target, method) => { sentCommands.push({ target, method }); return { method }; },
     onEvent: events.debuggerEvent, onDetach: events.debuggerDetach,
   },
 };
@@ -90,6 +95,8 @@ const connectClient = () => port.onMessage.fire({ method: "PyprocUserBrowserHost
 const leave = () => port.onMessage.fire({ method: "PyprocUserBrowserHost.clientGone", params: { connection } });
 const hello = async () => reply(send("PyprocUserBrowser.hello", { key: KEY }));
 const out = {};
+out.leftoverTaskTabDetached = !attached.has(600);
+out.unrelatedAttachedTabKept = attached.has(700);
 
 // A hello that settles after its client left never authorizes the next client, and its reply is dropped.
 connectClient();
@@ -150,6 +157,39 @@ for (const [method, params] of [["Page.close", {}], ["Page.navigateToHistoryEntr
 }
 out.navigateHttpAllowed = !(await reply(send("Page.navigate", { url: "https://b.example/next" }, session))).error;
 const ownTabId = Number(own.result.targetId);
+const frameAttach = { autoAttach: true, waitForDebuggerOnStart: false, flatten: true,
+  filter: [{ type: "iframe", exclude: false }] };
+out.frameAutoAttachAllowed = !(await reply(send("Target.setAutoAttach", frameAttach, session))).error;
+out.broadAutoAttachRefused = Boolean((await reply(send("Target.setAutoAttach", {
+  autoAttach: true, waitForDebuggerOnStart: false, flatten: true,
+}, session))).error);
+const frameStart = posted.length;
+events.debuggerEvent.fire({ tabId: ownTabId }, "Target.attachedToTarget", {
+  sessionId: "chrome-frame-1", targetInfo: { type: "iframe", targetId: "frame-1", url: "https://b.example/frame" },
+});
+const attachedFrame = posted.slice(frameStart).find((message) => message.method === "Target.attachedToTarget");
+const frameWireId = attachedFrame?.params?.sessionId;
+const childRead = await reply(send("Accessibility.getFullAXTree", {}, frameWireId));
+out.frameCommandRouted = !childRead.error && sentCommands.at(-1)?.target?.sessionId === "chrome-frame-1"
+  && sentCommands.at(-1)?.target?.tabId === ownTabId;
+const frameEventStart = posted.length;
+events.debuggerEvent.fire({ tabId: ownTabId, sessionId: "chrome-frame-1" }, "Page.frameNavigated", {
+  frame: { id: "frame-1", url: "https://b.example/frame" },
+});
+events.debuggerEvent.fire({ tabId: 999, sessionId: "chrome-frame-1" }, "Page.frameNavigated", {
+  frame: { id: "frame-1", url: "https://outside.example/" },
+});
+const frameEvents = posted.slice(frameEventStart).filter((message) => message.method === "Page.frameNavigated");
+out.frameEventScoped = frameEvents.length === 1 && frameEvents[0].sessionId === frameWireId;
+const workerStart = posted.length;
+events.debuggerEvent.fire({ tabId: ownTabId }, "Target.attachedToTarget", {
+  sessionId: "chrome-worker-1", targetInfo: { type: "worker", targetId: "worker-1" },
+});
+out.workerNotRegistered = !posted.slice(workerStart).some((message) => message.method === "Target.attachedToTarget");
+events.debuggerDetach.fire({ tabId: ownTabId, sessionId: "chrome-frame-1" }, "target_closed");
+out.childDetachKeepsRoot = !(await reply(send("DOM.getDocument", {}, session))).error;
+events.debuggerEvent.fire({ tabId: ownTabId }, "Target.detachedFromTarget", { sessionId: "chrome-frame-1" });
+out.detachedFrameRejected = Boolean((await reply(send("Accessibility.getFullAXTree", {}, frameWireId))).error);
 const cookieStart = posted.length;
 events.debuggerEvent.fire({ tabId: ownTabId }, "Network.requestWillBeSent",
   { request: { url: "https://b.example/", headers: { Cookie: "sid=1", Accept: "text/html" } } });

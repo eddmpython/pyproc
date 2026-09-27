@@ -28,6 +28,8 @@ const DENIED_METHODS = new Set(["Network.getCookies", "Network.getAllCookies", "
   "Network.deleteCookies", "Network.clearBrowserCookies", "Network.clearBrowserCache", "Network.setCookieControls",
   "Network.loadNetworkResource", "Page.getCookies", "Page.deleteCookie", "Page.setDownloadBehavior", "Page.close",
   "Page.crash", "Page.navigateToHistoryEntry", "Page.resetNavigationHistory"]);
+const FRAME_AUTO_ATTACH = Object.freeze({ autoAttach: true, waitForDebuggerOnStart: false,
+  flatten: true, filter: [{ type: "iframe", exclude: false }] });
 // Network events that carry the profile's cookies; the rest have their cookie headers removed.
 const DROPPED_EVENTS = new Set(["Network.requestWillBeSentExtraInfo", "Network.responseReceivedExtraInfo",
   "Network.responseReceivedEarlyHints"]);
@@ -40,7 +42,8 @@ let connection = 0;
 let authorizedConnection = 0;
 let pendingPair = null;
 let sessionCounter = 0;
-const task = { windowId: null, tabs: new Set(), created: new Set(), sessions: new Map(), tabSessions: new Map() };
+const task = { windowId: null, tabs: new Set(), created: new Set(), sessions: new Map(),
+  tabSessions: new Map(), childSessions: new Map() };
 const DOWNLOAD_WAIT_MAX_MS = 600000;
 // How long a download the browser created stays claimable by a Page.downloadWillBegin that arrives after it.
 const DOWNLOAD_MATCH_MS = 5000;
@@ -143,16 +146,17 @@ function webUrl(url) {
 // The task's window and own tabs, kept in session storage so a restarted service worker can close what the task
 // left open and let go of every tab this extension still debugs.
 function persistTask() {
-  void chrome.storage.session.set({ task: { windowId: task.windowId, created: [...task.created] } });
+  void chrome.storage.session.set({ task: { windowId: task.windowId, created: [...task.created],
+    attached: [...task.tabSessions.keys()] } });
 }
 
 async function closeLeftoverTask() {
-  for (const target of await chrome.debugger.getTargets()) {
-    if (target.attached && Number.isInteger(target.tabId)) {
-      try { await chrome.debugger.detach({ tabId: target.tabId }); } catch { /* another client's attachment */ }
+  const { task: leftover } = await chrome.storage.session.get("task");
+  for (const tabId of leftover?.attached || []) {
+    if (Number.isInteger(tabId)) {
+      try { await chrome.debugger.detach({ tabId }); } catch {}
     }
   }
-  const { task: leftover } = await chrome.storage.session.get("task");
   for (const tabId of leftover?.created || []) {
     try { await chrome.tabs.remove(tabId); } catch {}
   }
@@ -198,7 +202,16 @@ async function attachTab(targetId, epoch) {
   const sessionId = `userBrowser:${tabId}:${++sessionCounter}`;
   task.sessions.set(sessionId, tabId);
   task.tabSessions.set(tabId, sessionId);
+  persistTask();
   return { sessionId };
+}
+
+function removeChildSessions(parentId) {
+  for (const [wireId, child] of [...task.childSessions]) {
+    if (child.parentId !== parentId) continue;
+    removeChildSessions(wireId);
+    task.childSessions.delete(wireId);
+  }
 }
 
 async function detachSession(sessionId) {
@@ -206,6 +219,8 @@ async function detachSession(sessionId) {
   if (tabId === undefined) return { detached: false };
   task.sessions.delete(sessionId);
   task.tabSessions.delete(tabId);
+  removeChildSessions(sessionId);
+  persistTask();
   try { await chrome.debugger.detach({ tabId }); } catch {}
   return { detached: true };
 }
@@ -300,17 +315,24 @@ async function endTask(reason) {
 }
 
 async function command(sessionId, method, params) {
-  const tabId = task.sessions.get(sessionId);
-  if (tabId === undefined) throw new ProviderError(-32001, "session is not attached");
+  const child = task.childSessions.get(sessionId);
+  const tabId = child?.tabId ?? task.sessions.get(sessionId);
+  const rootId = child?.rootId || sessionId;
+  if (tabId === undefined || !inTask(tabId) || task.tabSessions.get(tabId) !== rootId) {
+    throw new ProviderError(-32001, "session is not attached");
+  }
   const domain = String(method).split(".")[0];
-  if (!ALLOWED_DOMAINS.has(domain) || DENIED_METHODS.has(method)) {
+  const autoAttach = method === "Target.setAutoAttach"
+    && JSON.stringify(params || {}) === JSON.stringify(FRAME_AUTO_ATTACH);
+  if ((!ALLOWED_DOMAINS.has(domain) && !autoAttach) || DENIED_METHODS.has(method)) {
     throw new ProviderError(-32000, `${method} is refused in a user browser`);
   }
   // A task tab stays on the web: no file, extension, or browser pages.
   if (method === "Page.navigate" && !webUrl(params?.url)) {
     throw new ProviderError(-32000, "a task tab navigates only to an http(s) URL");
   }
-  return await chrome.debugger.sendCommand({ tabId }, method, params || {});
+  return await chrome.debugger.sendCommand(child
+    ? { tabId, sessionId: child.chromeId } : { tabId }, method, params || {});
 }
 
 function cancelPendingPair(message) {
@@ -495,6 +517,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (sessionId) {
     task.sessions.delete(sessionId);
     task.tabSessions.delete(tabId);
+    removeChildSessions(sessionId);
+    persistTask();
     event("PyprocUserBrowser.detached", { sessionId, reason: "target_closed" });
   }
   task.tabs.delete(tabId);
@@ -518,6 +542,31 @@ chrome.downloads.onChanged.addListener((delta) => {
   if (delta.state?.current === "complete" || delta.state?.current === "interrupted") void reportDownload(delta.id);
 });
 chrome.debugger.onEvent.addListener((source, method, params) => {
+  const rootId = task.tabSessions.get(source.tabId);
+  if (!rootId || !inTask(source.tabId)) return;
+  const parent = source.sessionId
+    ? [...task.childSessions.values()].find((child) => child.tabId === source.tabId
+      && child.chromeId === source.sessionId && child.rootId === rootId)
+    : null;
+  if (source.sessionId && !parent) return;
+  const parentId = parent?.wireId || rootId;
+  if (method === "Target.attachedToTarget") {
+    if (params?.targetInfo?.type !== "iframe" || !params.sessionId || !params.targetInfo.targetId) return;
+    const wireId = `userBrowserFrame:${source.tabId}:${++sessionCounter}`;
+    task.childSessions.set(wireId, { wireId, chromeId: params.sessionId,
+      targetId: params.targetInfo.targetId, tabId: source.tabId, parentId, rootId });
+    event(method, { ...params, sessionId: wireId }, parentId);
+    return;
+  }
+  if (method === "Target.detachedFromTarget") {
+    const child = [...task.childSessions.values()].find((item) => item.tabId === source.tabId
+      && item.chromeId === params?.sessionId && item.parentId === parentId);
+    if (!child) return;
+    removeChildSessions(child.wireId);
+    task.childSessions.delete(child.wireId);
+    event(method, { ...params, sessionId: child.wireId }, parentId);
+    return;
+  }
   if (method === "Page.downloadWillBegin") {
     for (const expectation of downloads.expectations.values()) {
       if (expectation.tabId !== source.tabId || expectation.downloadId !== null) continue;
@@ -528,15 +577,17 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
       }
     }
   }
-  const sessionId = task.tabSessions.get(source.tabId);
-  if (!sessionId || DROPPED_EVENTS.has(method)) return;
-  event(method, String(method).startsWith("Network.") ? withoutCookies(params || {}) : params || {}, sessionId);
+  if (DROPPED_EVENTS.has(method)) return;
+  event(method, String(method).startsWith("Network.") ? withoutCookies(params || {}) : params || {}, parentId);
 });
 chrome.debugger.onDetach.addListener((source, reason) => {
+  if (source.sessionId) return;
   const sessionId = task.tabSessions.get(source.tabId);
   if (!sessionId) return;
   task.sessions.delete(sessionId);
   task.tabSessions.delete(source.tabId);
+  removeChildSessions(sessionId);
+  persistTask();
   event("PyprocUserBrowser.detached", { sessionId, reason });
   // Cancelling the debugging bar withdraws the whole task, not only this tab.
   if (reason === "canceled_by_user") {

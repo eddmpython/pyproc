@@ -1,11 +1,12 @@
 // userBrowserTransport.js - the paired extension's task tabs as a BrowserControlPort transport.
 // The connection speaks flat CDP whose sessions are the extension's chrome.debugger tab sessions; target lifecycle is
 // the extension's PyprocUserBrowser methods, which reach only the task window's tabs and the tabs they opened.
-export class UserBrowserTransport {
+import { NodeCdpTransport } from "../nodeCdpTransport.js";
+
+export class UserBrowserTransport extends NodeCdpTransport {
   constructor(connection) {
     if (!connection || typeof connection.send !== "function") throw new TypeError("user browser connection is required");
-    this._connection = connection;
-    this._sessions = new Map();
+    super(connection);
   }
 
   async listTargets() {
@@ -29,6 +30,7 @@ export class UserBrowserTransport {
       // Same-origin navigation must replace the opaque locator epoch, as on a native CDP session.
       await this._connection.send("Page.enable", {}, session.id);
       this._sessions.set(sessionId, session);
+      await this._autoAttach(session.id);
       return session;
     } catch (error) {
       await Promise.allSettled([this._connection.send("PyprocUserBrowser.detachSession", { sessionId })]);
@@ -48,10 +50,6 @@ export class UserBrowserTransport {
     }
     if (!url) throw new Error(`user browser tab unavailable: ${session.targetId}`);
     return { id: session.targetId, type: "page", url, title: "" };
-  }
-
-  send(session, command, options = {}) {
-    return this._connection.send(command.method, command.params || {}, session.id, options);
   }
 
   // Arms the extension for the one download this tab starts next. `done` settles to where the browser saved it
@@ -80,33 +78,37 @@ export class UserBrowserTransport {
     });
   }
 
-  subscribe(session, listener) {
-    return this._connection.subscribe((event) => {
-      if (event.method === "PyprocUserBrowser.detached") {
-        if (event.params.sessionId !== session.id) return;
-        this._sessions.delete(session.id);
-        listener({ method: "Transport.detached", params: { reason: event.params.reason || "target_closed" } });
-        return;
-      }
-      if (event.sessionId === session.id) listener({ method: event.method, params: event.params });
-    });
+  _receiveEvent(event) {
+    if (event.method === "PyprocUserBrowser.detached") {
+      const rootId = event.params?.sessionId;
+      if (!this._sessions.has(rootId)) return;
+      this._sessions.delete(rootId);
+      this._removeChildren(rootId);
+      this._emit(rootId, { method: "Transport.detached",
+        params: { reason: event.params.reason || "target_closed" } });
+      return;
+    }
+    super._receiveEvent(event);
   }
 
   inspect() {
-    return Object.freeze({ provider: "userBrowser", sessions: this._sessions.size });
+    return Object.freeze({ ...super.inspect(), provider: "userBrowser" });
   }
 
   async detach(session) {
     if (!this._sessions.has(session.id)) return;
     try { await this._connection.send("PyprocUserBrowser.detachSession", { sessionId: session.id }); }
-    finally { this._sessions.delete(session.id); }
+    finally {
+      this._sessions.delete(session.id);
+      this._removeChildren(session.id);
+      this._listeners.delete(session.id);
+    }
   }
 
   async close() {
-    this._sessions.clear();
     // Ending the task is the extension's job too (it ends it when this connection goes), so a pipe already gone is
     // not an error here.
     try { await this._connection.send("PyprocUserBrowser.endTask"); } catch {}
-    this._connection.close();
+    await super.close();
   }
 }

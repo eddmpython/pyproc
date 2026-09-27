@@ -375,6 +375,12 @@ export class BrowserAutomation {
           this._sendCommand(sessionRef, method, params, commandResults, signal, true),
         eventCapture: (sessionRef, options, commandResults, signal) =>
           this._observation.capture(sessionRef, options, commandResults, signal),
+        frameAllowed: (url) => this._port.policy.allowsTarget({ id: "frame", type: "page", url, title: "" }),
+        framePresent: async (sessionRef, commandResults, signal) => {
+          const tree = await this._sendCommand(sessionRef, "Page.getFrameTree", {}, commandResults, signal, true);
+          if (tree.result?.frameTree?.childFrames?.length) return true;
+          return (await this._port.frameTargets(sessionRef)).total > 0;
+        },
       }),
       idFactory,
       locatorReset: (sessionRef) => this._clearSessionLocators(sessionKey(sessionRef)),
@@ -626,32 +632,73 @@ export class BrowserAutomation {
     this._clearSessionLocators(key);
     const command = await this._command(sessionRef, "Accessibility.getFullAXTree", {}, commandResults, signal);
     const raw = command.result || {};
+    const rootFrameCount = (raw.nodes || []).filter((node) => remoteValue(node.role) === "Iframe").length;
+    const frameSources = [{ nodes: raw.nodes || [], framePath: [] }];
+    let framesComplete = true;
+    let rawBytes = byteLength(raw);
+    if (rootFrameCount) {
+      const before = await this._command(sessionRef, "Page.getFrameTree", {}, commandResults, signal);
+      const frames = this._snapshotFrames(before.result?.frameTree);
+      let children = await this._port.frameTargets(sessionRef);
+      const frameDeadline = Date.now() + 1000;
+      while (rootFrameCount > frames.total + children.total && Date.now() < frameDeadline) {
+        await delay(Math.min(WAIT_POLL_MS, Math.max(1, frameDeadline - Date.now())), signal);
+        children = await this._port.frameTargets(sessionRef);
+      }
+      const separate = children.frames.filter((frame) => !frames.allowed.some((path) => path.at(-1).id === frame.id));
+      framesComplete = frames.allowed.length === frames.total && children.frames.length === children.total
+        && rootFrameCount <= frames.total + children.total;
+      for (const framePath of frames.allowed) {
+        const frameId = framePath.at(-1).id;
+        const child = await this._command(sessionRef, "Accessibility.getFullAXTree", { frameId }, commandResults, signal);
+        frameSources.push({ nodes: child.result?.nodes || [], framePath });
+        rawBytes += byteLength(child.result || {});
+      }
+      for (const frame of separate) {
+        const child = await this._sendCommand(sessionRef, "Accessibility.getFullAXTree", {},
+          commandResults, signal, false, { frameId: frame.id, frameUrl: frame.url,
+            frameLoaderId: frame.loaderId });
+        if (!child.result?.nodes?.length) framesComplete = false;
+        frameSources.push({ nodes: child.result?.nodes || [], framePath: [], frame });
+        rawBytes += byteLength(child.result || {});
+      }
+      const after = await this._command(sessionRef, "Page.getFrameTree", {}, commandResults, signal);
+      const childrenAfter = await this._port.frameTargets(sessionRef);
+      if (before.contextEpoch !== command.contextEpoch || after.contextEpoch !== command.contextEpoch
+        || JSON.stringify(before.result?.frameTree) !== JSON.stringify(after.result?.frameTree)
+        || JSON.stringify(children) !== JSON.stringify(childrenAfter)) {
+        throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+          "browser frame changed during observation", { outcome: "notSent", retryable: true });
+      }
+    }
     const maxNodes = action.maxNodes || BROWSER_AUTOMATION_DEFAULT_MAX_NODES;
     const mode = action.mode || "all";
     const eligibleNodes = [];
-    const rawNodeById = new Map((raw.nodes || []).map((node) => [node.nodeId, node]));
     const locatorRefs = new Set();
-    for (const node of raw.nodes || []) {
-      if (node.ignored) continue;
-      const role = clipped(remoteValue(node.role));
-      const name = clipped(remoteValue(node.name));
-      const value = clipped(remoteValue(node.value));
-      const description = clipped(remoteValue(node.description));
-      if (!role && !name && !value && !description) continue;
-      const compact = { role: role || "unknown" };
-      if (name) compact.name = name;
-      if (value) compact.value = value;
-      if (description) compact.description = description;
-      const states = {};
-      for (const property of node.properties || []) {
-        if (!AX_STATES.has(property.name)) continue;
-        const propertyValue = remoteValue(property.value);
-        if (propertyValue !== undefined) states[property.name] = propertyValue;
+    for (const source of frameSources) {
+      const rawNodeById = new Map(source.nodes.map((node) => [node.nodeId, node]));
+      for (const node of source.nodes) {
+        if (node.ignored) continue;
+        const role = clipped(remoteValue(node.role));
+        const name = clipped(remoteValue(node.name));
+        const value = clipped(remoteValue(node.value));
+        const description = clipped(remoteValue(node.description));
+        if (!role && !name && !value && !description) continue;
+        const compact = { role: role || "unknown" };
+        if (name) compact.name = name;
+        if (value) compact.value = value;
+        if (description) compact.description = description;
+        const states = {};
+        for (const property of node.properties || []) {
+          if (!AX_STATES.has(property.name)) continue;
+          const propertyValue = remoteValue(property.value);
+          if (propertyValue !== undefined) states[property.name] = propertyValue;
+        }
+        if (Object.keys(states).length) compact.states = Object.freeze(states);
+        eligibleNodes.push({ node, compact, rawNodeById, framePath: source.framePath, frame: source.frame });
       }
-      if (Object.keys(states).length) compact.states = Object.freeze(states);
-      eligibleNodes.push({ node, compact });
     }
-    const liveText = ({ node, compact }) => {
+    const liveText = ({ node, compact, rawNodeById }) => {
       if (!AX_TEXT_ROLES.has(compact.role)) return false;
       let parentId = node.parentId;
       for (let depth = 0; parentId && depth < 4; depth += 1) {
@@ -671,7 +718,7 @@ export class BrowserAutomation {
         `semantic inventory has ${candidates.length} items; maximum is ${SEMANTIC_INVENTORY_MAX_ITEMS}`);
     }
     const nodes = [];
-    for (const { node, compact } of candidates) {
+    for (const { node, compact, framePath, frame } of candidates) {
       if (Number.isInteger(node.backendDOMNodeId) && node.backendDOMNodeId > 0) {
         const locatorRef = `locator:${this._idFactory()}`;
         compact.locatorRef = locatorRef;
@@ -680,6 +727,8 @@ export class BrowserAutomation {
           sessionKey: key,
           contextEpoch: command.contextEpoch,
           backendNodeId: node.backendDOMNodeId,
+          ...(framePath.length ? { framePath } : {}),
+          ...(frame ? { frame } : {}),
         }));
       }
       nodes.push(Object.freeze(compact));
@@ -694,7 +743,8 @@ export class BrowserAutomation {
       mode,
       eligibleNodes: eligibleNodes.length,
       candidateNodes: candidates.length,
-      rawBytes: byteLength(raw),
+      rawBytes,
+      framesComplete,
     };
     const artifacts = await this._observation.capture(sessionRef, action, commandResults, signal);
     try {
@@ -726,6 +776,27 @@ export class BrowserAutomation {
       }
       throw error;
     }
+  }
+
+  _snapshotFrames(root) {
+    const allowed = [];
+    let total = 0;
+    const visit = (branch, parentPath, parentUrl) => {
+      for (const child of branch?.childFrames || []) {
+        total += 1;
+        const frame = child.frame || {};
+        const frameUrl = frame.url || "";
+        const effectiveUrl = /^about:(?:blank|srcdoc)$/.test(frameUrl) ? parentUrl : frameUrl;
+        if (!this._port.policy.allowsTarget({ id: frame.id, type: "page", url: effectiveUrl, title: "" })) continue;
+        const path = Object.freeze([...parentPath, Object.freeze({
+          id: frame.id, loaderId: frame.loaderId || "", url: frameUrl,
+        })]);
+        allowed.push(path);
+        visit(child, path, effectiveUrl);
+      }
+    };
+    visit(root, [], root?.frame?.url || "");
+    return { allowed, total };
   }
 
   async _waitFor(sessionRef, action, commandResults, signal) {
@@ -1025,8 +1096,9 @@ export class BrowserAutomation {
       userGesture: true,
     };
     const command = sendBoundary
-      ? await this._effectCommand(sessionRef, "Runtime.callFunctionOn", params, commandResults, signal, sendBoundary)
-      : await this._command(sessionRef, "Runtime.callFunctionOn", params, commandResults, signal);
+      ? await this._effectCommand(sessionRef, "Runtime.callFunctionOn", params, commandResults, signal,
+        sendBoundary, target.frame)
+      : await this._command(sessionRef, "Runtime.callFunctionOn", params, commandResults, signal, target.frame);
     const scriptError = exceptionText(command);
     if (scriptError) {
       const missing = /target is missing|not an Element|not editable|not a select|not focusable/i.test(scriptError);
@@ -1190,7 +1262,7 @@ export class BrowserAutomation {
     }
     await this._effectCommand(
       sessionRef, "DOM.setFileInputFiles", { objectId: prepared.target.objectId, files },
-      commandResults, signal, sendBoundary,
+      commandResults, signal, sendBoundary, prepared.target.frame,
     );
     return this._callTargetFunction(sessionRef, prepared.target, UPLOAD_STATE_FUNCTION, [], commandResults, signal);
   }
@@ -1368,7 +1440,7 @@ export class BrowserAutomation {
           functionDeclaration: TARGET_IDENTITY_FUNCTION,
           arguments: [{ objectId: rebound.objectId }],
           returnByValue: true,
-        }, commandResults, signal, true);
+        }, commandResults, signal, true, prepared.target.frame);
         const status = await this._inspectTarget(sessionRef, prepared.target,
           browserActionabilityRequirements(prepared.bindingAction.kind), commandResults, signal, true);
         checkedDocumentEpoch = status.contextEpoch;
@@ -1426,13 +1498,13 @@ export class BrowserAutomation {
     });
   }
 
-  async _effectCommand(sessionRef, method, params, commandResults, signal, boundary) {
+  async _effectCommand(sessionRef, method, params, commandResults, signal, boundary, frame = null) {
     if (boundary.sendRequestedAt === null) {
       boundary.convergence?.markEffectAttempt();
       boundary.sendRequestedAt = this._now();
     }
     try {
-      const result = await this._command(sessionRef, method, params, commandResults, signal);
+      const result = await this._command(sessionRef, method, params, commandResults, signal, frame);
       if (boundary.providerAcknowledgedAt === null) boundary.providerAcknowledgedAt = this._now();
       return result;
     } catch (error) {
@@ -1447,7 +1519,7 @@ export class BrowserAutomation {
       functionDeclaration: BROWSER_ACTIONABILITY_FUNCTION,
       arguments: [{ value: { ...requirements, hostFrameChain: !!target.frameChain?.length } }],
       returnByValue: true,
-    }, commandResults, signal, trustedRead);
+    }, commandResults, signal, trustedRead, target.frame);
     const scriptError = exceptionText(command);
     if (scriptError) {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.targetMissing,
@@ -1493,7 +1565,8 @@ export class BrowserAutomation {
     final.parentHitFrameId = hitFrameId;
     status.point = point;
     status.frameChain = frameChain;
-    if (hitFrameId !== target.frameId) {
+    const frameOwnerHit = !!target.frame && hit.result?.backendNodeId === target.frameChain.at(-1).ownerBackendNodeId;
+    if (hitFrameId !== target.frameId && !frameOwnerHit) {
       status.receivesEvents = false;
       status.reasons = [...new Set([...(status.reasons || []), "frameIntercepted"])];
     }
@@ -1589,6 +1662,39 @@ export class BrowserAutomation {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
         "browser locator belongs to a replaced document", { outcome: "notSent", retryable: true });
     }
+    if (locator.frame) {
+      return this._resolveSeparateFrameLocator(sessionRef, locatorRef, locator, commandResults, signal, trustedRead);
+    }
+    let frameChain = null;
+    let frameId = null;
+    if (locator.framePath?.length) {
+      frameChain = [];
+      let branch = guarded.result?.frameTree;
+      let authorityUrl = branch?.frame?.url || "";
+      for (const expected of locator.framePath) {
+        branch = (branch?.childFrames || []).find((child) => child.frame?.id === expected.id);
+        const frame = branch?.frame;
+        if (!frame || frame.url !== expected.url || (frame.loaderId || "") !== expected.loaderId) {
+          this._clearSessionLocators(locator.sessionKey);
+          throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+            "browser frame locator belongs to a replaced frame", { outcome: "notSent", retryable: true });
+        }
+        authorityUrl = /^about:(?:blank|srcdoc)$/.test(frame.url) ? authorityUrl : frame.url;
+        if (!this._port.policy.allowsTarget({ id: frame.id, type: "page", url: authorityUrl, title: "" })) {
+          throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionDenied,
+            "browser frame is outside permission", { outcome: "notSent" });
+        }
+        const owner = await this._sendCommand(sessionRef, "DOM.getFrameOwner", { frameId: frame.id },
+          commandResults, signal, trustedRead);
+        if (owner.contextEpoch !== locator.contextEpoch || !Number.isInteger(owner.result?.backendNodeId)) {
+          this._clearSessionLocators(locator.sessionKey);
+          throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+            "browser frame owner changed", { outcome: "notSent", retryable: true });
+        }
+        frameChain.push(Object.freeze({ frameId: frame.id, ownerBackendNodeId: owner.result.backendNodeId }));
+        frameId = frame.id;
+      }
+    }
     const resolved = await this._sendCommand(sessionRef, "DOM.resolveNode", {
       backendNodeId: locator.backendNodeId,
     }, commandResults, signal, trustedRead);
@@ -1602,29 +1708,64 @@ export class BrowserAutomation {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.targetMissing,
         "browser locator target is unavailable", { outcome: "notSent", retryable: true });
     }
-    return Object.freeze({ objectId, description: locatorRef, contextEpoch: resolved.contextEpoch });
+    return Object.freeze({ objectId, description: locatorRef, contextEpoch: resolved.contextEpoch,
+      ...(frameId ? { frameId, frameChain: Object.freeze(frameChain) } : {}) });
+  }
+
+  async _resolveSeparateFrameLocator(sessionRef, locatorRef, locator, commandResults, signal, trustedRead) {
+    const children = await this._port.frameTargets(sessionRef);
+    const frame = children.frames.find((item) => item.id === locator.frame.id);
+    if (!frame || frame.url !== locator.frame.url || frame.loaderId !== locator.frame.loaderId
+      || frame.parentId !== locator.frame.parentId) {
+      this._clearSessionLocators(locator.sessionKey);
+      throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+        "browser separate frame locator belongs to a replaced frame", { outcome: "notSent", retryable: true });
+    }
+    if (frame.parentId !== children.rootId) {
+      throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionDenied,
+        "nested separate frame actions are unavailable", { outcome: "notSent" });
+    }
+    const owner = await this._sendCommand(sessionRef, "DOM.getFrameOwner", { frameId: frame.id },
+      commandResults, signal, trustedRead);
+    if (owner.contextEpoch !== locator.contextEpoch || !Number.isInteger(owner.result?.backendNodeId)) {
+      throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+        "browser separate frame owner changed", { outcome: "notSent", retryable: true });
+    }
+    const route = Object.freeze({ frameId: frame.id, frameUrl: frame.url, frameLoaderId: frame.loaderId });
+    const resolved = await this._sendCommand(sessionRef, "DOM.resolveNode", {
+      backendNodeId: locator.backendNodeId,
+    }, commandResults, signal, trustedRead, route);
+    if (resolved.contextEpoch !== locator.contextEpoch || !resolved.result?.object?.objectId) {
+      throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+        "browser separate frame target changed", { outcome: "notSent", retryable: true });
+    }
+    return Object.freeze({ objectId: resolved.result.object.objectId, description: locatorRef,
+      contextEpoch: resolved.contextEpoch, frameId: frame.id, frame: route,
+      frameChain: Object.freeze([Object.freeze({ frameId: frame.id,
+        ownerBackendNodeId: owner.result.backendNodeId })]) });
   }
 
   async _releaseTarget(sessionRef, target, commandResults, signal, trustedRead = false) {
     if (!target?.objectId) return;
     try {
-      await this._sendCommand(sessionRef, "Runtime.releaseObject", { objectId: target.objectId }, commandResults, signal, trustedRead);
+      await this._sendCommand(sessionRef, "Runtime.releaseObject", { objectId: target.objectId },
+        commandResults, signal, trustedRead, target.frame);
     } catch (error) {
       this._audit({ kind: "remoteObjectRelease", risk: "read", state: "failed", code: error?.code || "PYPROC_INTERNAL" });
     }
   }
 
-  async _command(sessionRef, method, params, commandResults, signal) {
-    return this._sendCommand(sessionRef, method, params, commandResults, signal, false);
+  async _command(sessionRef, method, params, commandResults, signal, frame = null) {
+    return this._sendCommand(sessionRef, method, params, commandResults, signal, false, frame);
   }
 
-  async _sendCommand(sessionRef, method, params, commandResults, signal, trustedRead) {
+  async _sendCommand(sessionRef, method, params, commandResults, signal, trustedRead, frame = null) {
     try {
       const result = await this._port.send(sessionRef, {
         method,
         params,
         expectedRisk: trustedRead ? "read" : BROWSER_CONTROL_COMMAND_RISKS[method],
-      }, { signal, trustedRead });
+      }, { signal, trustedRead, ...(frame || {}) });
       commandResults.push(Object.freeze({ method, result }));
       return result;
     } catch (error) {

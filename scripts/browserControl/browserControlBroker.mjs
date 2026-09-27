@@ -301,7 +301,7 @@ export async function connectNodeBrowserControl({
     const compatibility = assertBrowserCompatibility(await connection.send("Browser.getVersion"));
     // Installed before the first target is opened, so no request of the session ever runs unguarded.
     guard = requests === "safe" ? await RequestGuard.install(connection) : null;
-    const port = new BrowserControlPort({ transport: new NodeCdpTransport(connection), policy });
+    const port = new BrowserControlPort({ transport: new NodeCdpTransport(connection, { guard }), policy });
     return new NodeBrowserControlBroker({ connection, port, compatibility, timeoutMs, viewport, guard, holdOutside });
   } catch (error) {
     guard?.close();
