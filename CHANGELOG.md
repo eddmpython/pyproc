@@ -14,6 +14,11 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Added
 
+- **Child-frame text and controls in legacy browser observations.** A task reads the permitted text in same-process
+  and out-of-process frames, including a task window in the user's Chrome or Edge. The frame's origin and ancestry
+  are checked before access, and replacing its document invalidates the old locator. Direct child-frame controls
+  receive trusted input through the same task boundary. Frames outside the permitted sites are omitted. APX frame
+  capture remains partial, and nested out-of-process frame actions are not yet covered by this contract.
 - **Uncaught exceptions and the browser's log in the console channel.** An observation with `includeConsole` now
   carries the page's uncaught exceptions (`source: "exception"`, with the script URL, line, and column) and the
   browser's own log entries (a resource that failed to load, a blocked request, a violation), beside the page's console
