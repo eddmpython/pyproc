@@ -7,7 +7,8 @@ export class NodeCdpTransport {
     this._sessions = new Map();
     this._children = new Map();
     this._listeners = new Map();
-    this._unsubscribe = connection.subscribe((event) => this._receiveEvent(event));
+    this._unsubscribe = null;
+    this._pendingAttaches = 0;
   }
 
   async listTargets() {
@@ -30,20 +31,30 @@ export class NodeCdpTransport {
   }
 
   async attach(targetId) {
-    const { sessionId } = await this._connection.send("Target.attachToTarget", { targetId, flatten: true });
-    const session = Object.freeze({ id: sessionId, targetId: String(targetId) });
+    this._unsubscribe ||= this._connection.subscribe((event) => this._receiveEvent(event));
+    this._pendingAttaches += 1;
+    let sessionId;
     try {
+      ({ sessionId } = await this._attachTarget(targetId));
+      const session = Object.freeze({ id: sessionId, targetId: String(targetId) });
+      this._sessions.set(sessionId, session);
       // Same-origin navigation도 opaque locator document epoch을 바꿔야 한다. Page domain은
       // transport 운영 이벤트용으로 내부 활성화하며 raw command permission에는 추가하지 않는다.
       await this._connection.send("Page.enable", {}, session.id);
-      this._sessions.set(sessionId, session);
       if (!this._guard) await this._autoAttach(session.id);
+      if (!this._sessions.has(sessionId)) throw new Error("browser target detached during attach");
       return session;
     } catch (error) {
-      await Promise.allSettled([
-        this._connection.send("Target.detachFromTarget", { sessionId }),
-      ]);
+      if (sessionId) {
+        await Promise.allSettled([
+          this._detachSession(sessionId),
+        ]);
+        this._removeSession(sessionId);
+      }
       throw error;
+    } finally {
+      this._pendingAttaches -= 1;
+      this._releaseSubscription();
     }
   }
 
@@ -110,20 +121,38 @@ export class NodeCdpTransport {
 
   async detach(session) {
     if (!this._sessions.has(session.id)) return;
-    try { await this._connection.send("Target.detachFromTarget", { sessionId: session.id }); }
-    finally {
-      this._sessions.delete(session.id);
-      this._removeChildren(session.id);
-      this._listeners.delete(session.id);
-    }
+    try { await this._detachSession(session.id); }
+    finally { this._removeSession(session.id); }
   }
 
   async close() {
     this._sessions.clear();
     this._children.clear();
     this._listeners.clear();
-    this._unsubscribe();
+    this._unsubscribe?.();
+    this._unsubscribe = null;
     this._connection.close();
+  }
+
+  _releaseSubscription() {
+    if (this._sessions.size || this._pendingAttaches) return;
+    this._unsubscribe?.();
+    this._unsubscribe = null;
+  }
+
+  _attachTarget(targetId) {
+    return this._connection.send("Target.attachToTarget", { targetId, flatten: true });
+  }
+
+  _detachSession(sessionId) {
+    return this._connection.send("Target.detachFromTarget", { sessionId });
+  }
+
+  _removeSession(sessionId) {
+    this._sessions.delete(sessionId);
+    this._removeChildren(sessionId);
+    this._listeners.delete(sessionId);
+    this._releaseSubscription();
   }
 
   _autoAttach(sessionId) {
@@ -179,8 +208,10 @@ export class NodeCdpTransport {
       if (this._sessions.has(event.params?.sessionId)) {
         this._sessions.delete(event.params.sessionId);
         this._removeChildren(event.params.sessionId);
-        this._emit(event.params.sessionId, { method: "Transport.detached",
-          params: { reason: event.params.reason || "target_closed" } });
+        try {
+          this._emit(event.params.sessionId, { method: "Transport.detached",
+            params: { reason: event.params.reason || "target_closed" } });
+        } finally { this._removeSession(event.params.sessionId); }
       }
       return;
     }

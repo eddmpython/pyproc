@@ -7,6 +7,7 @@ import {
   connectNodeBrowserControl,
 } from "../../scripts/browserControl/browserControlBroker.mjs";
 import { CdpConnection } from "../../scripts/browserControl/cdpConnection.mjs";
+import { NodeCdpTransport } from "../../scripts/browserControl/nodeCdpTransport.js";
 import {
   BrowserControlPort,
   BROWSER_CONTROL_ERROR_CODES,
@@ -188,6 +189,57 @@ function browserGuestFactory() {
 }
 
 export async function assertBrowserControlContract() {
+  // 마지막 세션을 닫은 제품은 재사용 가능해야 하며 connection 구독을 남기지 않는다.
+  const connectionListeners = new Set();
+  let failCommand = "";
+  let finishAttach;
+  const connection = {
+    subscribe(listener) {
+      connectionListeners.add(listener);
+      return () => connectionListeners.delete(listener);
+    },
+    async send(method, params) {
+      if (method === failCommand) throw new Error(`failed ${method}`);
+      if (method === "Target.attachToTarget") {
+        if (params.targetId === "pending") await new Promise((resolve) => { finishAttach = resolve; });
+        return { sessionId: `raw:${params.targetId}` };
+      }
+      return {};
+    },
+    close() {},
+  };
+  const nativeTransport = new NodeCdpTransport(connection);
+  assert(connectionListeners.size === 0, "사용하지 않는 transport가 connection을 구독한다");
+  for (const command of ["Target.attachToTarget", "Page.enable", "Target.setAutoAttach"]) {
+    failCommand = command;
+    const error = await errorOf(() => nativeTransport.attach("failed"));
+    assert(error && connectionListeners.size === 0 && nativeTransport.inspect().sessions === 0,
+      `실패한 attach가 세션이나 구독을 남긴다: ${command}`);
+  }
+  failCommand = "";
+  const firstNativeSession = await nativeTransport.attach("first");
+  const pendingNativeSession = nativeTransport.attach("pending");
+  await nativeTransport.detach(firstNativeSession);
+  assert(connectionListeners.size === 1, "진행 중인 attach의 구독을 먼저 해제했다");
+  finishAttach();
+  const secondNativeSession = await pendingNativeSession;
+  const thirdNativeSession = await nativeTransport.attach("third");
+  await nativeTransport.detach(secondNativeSession);
+  assert(connectionListeners.size === 1, "다른 세션의 구독을 해제했다");
+  const detachedEvents = [];
+  nativeTransport.subscribe(thirdNativeSession, (event) => detachedEvents.push(event));
+  for (const listener of [...connectionListeners]) listener({ method: "Target.detachedFromTarget",
+    params: { sessionId: thirdNativeSession.id } });
+  assert(detachedEvents[0]?.method === "Transport.detached" && connectionListeners.size === 0
+    && nativeTransport.inspect().sessions === 0, "외부 세션 종료가 구독을 정리하지 않았다");
+  const finalNativeSession = await nativeTransport.attach("again");
+  assert(connectionListeners.size === 1, "재연결이 이벤트 구독을 복구하지 않았다");
+  failCommand = "Target.detachFromTarget";
+  await errorOf(() => nativeTransport.detach(finalNativeSession));
+  assert(connectionListeners.size === 0 && nativeTransport.inspect().sessions === 0,
+    "detach 실패가 구독을 남긴다");
+  await nativeTransport.close();
+
   const defaultBrowserArgs = headlessArgs("contract-profile");
   assert(defaultBrowserArgs.includes("--disable-extensions"), "공용 browser harness 기본 extension 차단이 열렸다");
   assert(!defaultBrowserArgs.some((arg) => arg.startsWith("--remote-debugging")),

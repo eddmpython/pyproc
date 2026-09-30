@@ -23,19 +23,12 @@ export class UserBrowserTransport extends NodeCdpTransport {
     return this._connection.send("PyprocUserBrowser.activateTab", { targetId: String(targetId) });
   }
 
-  async attach(targetId) {
-    const { sessionId } = await this._connection.send("PyprocUserBrowser.attachTab", { targetId: String(targetId) });
-    const session = Object.freeze({ id: sessionId, targetId: String(targetId) });
-    try {
-      // Same-origin navigation must replace the opaque locator epoch, as on a native CDP session.
-      await this._connection.send("Page.enable", {}, session.id);
-      this._sessions.set(sessionId, session);
-      await this._autoAttach(session.id);
-      return session;
-    } catch (error) {
-      await Promise.allSettled([this._connection.send("PyprocUserBrowser.detachSession", { sessionId })]);
-      throw error;
-    }
+  _attachTarget(targetId) {
+    return this._connection.send("PyprocUserBrowser.attachTab", { targetId: String(targetId) });
+  }
+
+  _detachSession(sessionId) {
+    return this._connection.send("PyprocUserBrowser.detachSession", { sessionId });
   }
 
   async describe(session) {
@@ -80,29 +73,13 @@ export class UserBrowserTransport extends NodeCdpTransport {
 
   _receiveEvent(event) {
     if (event.method === "PyprocUserBrowser.detached") {
-      const rootId = event.params?.sessionId;
-      if (!this._sessions.has(rootId)) return;
-      this._sessions.delete(rootId);
-      this._removeChildren(rootId);
-      this._emit(rootId, { method: "Transport.detached",
-        params: { reason: event.params.reason || "target_closed" } });
-      return;
+      return super._receiveEvent({ ...event, method: "Target.detachedFromTarget" });
     }
     super._receiveEvent(event);
   }
 
   inspect() {
     return Object.freeze({ ...super.inspect(), provider: "userBrowser" });
-  }
-
-  async detach(session) {
-    if (!this._sessions.has(session.id)) return;
-    try { await this._connection.send("PyprocUserBrowser.detachSession", { sessionId: session.id }); }
-    finally {
-      this._sessions.delete(session.id);
-      this._removeChildren(session.id);
-      this._listeners.delete(session.id);
-    }
   }
 
   async close() {

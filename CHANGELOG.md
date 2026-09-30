@@ -72,6 +72,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Fixed
 
+- Closing the last browser session now releases its transport event subscription. Failed attachment, concurrent
+  attachment, external target closure, and later reconnection preserve the same cleanup boundary.
 - A page that moves on to another page of the permission, or whose frame navigates, keeps delivering its events: a
   main frame that commits inside the permission is verified by the URL it committed, and a child frame's navigation no
   longer suspends the page. A download started behind a "your download will begin" page, or on a page with a

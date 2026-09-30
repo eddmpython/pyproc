@@ -137,6 +137,9 @@ export async function assertUserBrowserContract() {
   unsubscribe();
   assert.deepEqual(seen, ["Transport.frameAttached", "Transport.frameDetached",
     "Page.frameNavigated", "Transport.detached"]);
+  assert.equal(connection.listeners.size, 0, "external detach leaves no connection subscription");
+  await transport.detach(await transport.attach("7"));
+  assert.equal(connection.listeners.size, 0, "explicit detach leaves no connection subscription after reattach");
   const targets = userBrowserTargets(connection);
   assert.equal(await targets.create("about:blank"), undefined);
   assert.equal(connection.sent.at(-1).method, "PyprocUserBrowser.openTab");
