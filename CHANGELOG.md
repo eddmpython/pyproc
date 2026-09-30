@@ -12,6 +12,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.34 - 2026-10-01
+
 ### Added
 
 - **Child-frame text and controls in legacy browser observations.** A task reads the permitted text in same-process
@@ -81,6 +83,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   remains named in the error so the caller can inspect it before retrying.
 - A child frame reloading between actionability and input no longer invalidates an unchanged main-page target. A main
   document replacement still stops the action before input is sent.
+
+### 한국어 요약
+
+변하지 않은 페이지의 관찰 결과를 재사용하고, 다운로드의 실제 형식과 파일 보존 결과를 반환한다.
+Chrome과 Edge 사용자 브라우저에서도 과업이 시작한 다운로드만 다루며, 허용된 자식 iframe의 본문과
+직접 자식 control을 기존 관찰·조작 경계로 연결한다. 브라우저 log와 잡히지 않은 예외도 요청한 관찰에
+포함한다. APX의 frame 관찰과 중첩된 별도 process frame의 행동은 아직 완료된 계약에 포함하지 않는다.
 
 ## 0.0.33 - 2026-09-26
 
