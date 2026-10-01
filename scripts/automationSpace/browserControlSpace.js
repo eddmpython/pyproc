@@ -35,4 +35,6 @@ export class BrowserControlSpace {
   }
 
   close() { return this.control.close(); }
+
+  clean(value) { return this.control.clean(value); }
 }

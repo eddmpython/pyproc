@@ -34,6 +34,7 @@ import { BrowserTrace } from "./browserTrace.js";
 import { BrowserLifecycle } from "./browserLifecycle.js";
 import { BrowserDownload } from "./browserDownload.js";
 import { BrowserScreenshot } from "./browserScreenshot.js";
+import { BrowserSecretInput, secretInputError } from "./browserSecretInput.js";
 import {
   APX_ERROR_CODES,
   APX_REPRESENTATION,
@@ -87,10 +88,23 @@ const TARGET_IDENTITY_FUNCTION = `function(other) {
   return !!this && this === other;
 }`;
 
-const FILL_FUNCTION = `function(value) {
+const SECRET_FIELD_FUNCTION = `function(origin, field) {
+  return !!this && this.isConnected && this.ownerDocument.defaultView.location.origin === origin
+    && this.tagName === "INPUT" && (field === "password" ? this.type === "password"
+      : ["text", "email", "tel"].includes(this.type));
+}`;
+
+const FILL_FUNCTION = `function(value, origin, field) {
   "use strict";
   if (!this || this.nodeType !== 1) throw new Error("browser action target is not an Element");
+  const assertSecretField = () => {
+    if (origin && (!this.isConnected || this.ownerDocument.defaultView.location.origin !== origin
+      || this.tagName !== "INPUT" || (field === "password" ? this.type !== "password"
+        : !["text", "email", "tel"].includes(this.type)))) throw new Error("secret field changed before input");
+  };
+  assertSecretField();
   this.focus();
+  assertSecretField();
   if (this.isContentEditable) {
     const selection = this.ownerDocument.getSelection();
     const range = this.ownerDocument.createRange();
@@ -106,7 +120,8 @@ const FILL_FUNCTION = `function(value) {
   setter.call(this, value);
   this.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
   this.dispatchEvent(new Event("change", { bubbles: true }));
-  return { tag: this.tagName.toLowerCase(), value: String(this.value), inputMode: "nativeSetter" };
+  return { tag: this.tagName.toLowerCase(), ...(origin || this.type === "password"
+    ? { redacted: true } : { value: String(this.value) }), inputMode: "nativeSetter" };
 }`;
 
 const CONTENTEDITABLE_FILL_RESULT_FUNCTION = `function() {
@@ -347,6 +362,7 @@ export class BrowserAutomation {
     this._idFactory = idFactory;
     this._onAudit = onAudit;
     this._now = now;
+    this.secrets = new BrowserSecretInput({ now, idFactory });
     this._semanticInventory = new SemanticInventory({ idFactory, now });
     this._locators = new Map();
     this._sessionLocators = new Map();
@@ -436,10 +452,12 @@ export class BrowserAutomation {
         // A permission revision may have removed this action (or the snapshot its verify needs) while earlier ones ran.
         this._authorizeAction(action.kind);
         if (action.verify) this._authorizeAction("snapshot");
+        const secret = action.secretRef
+          ? this.secrets.consume(action.secretRef, sessionKey(sessionRef), action.locatorRef) : null;
         const perform = async (candidate) => {
           const actionSignal = actionConvergence?.signal || signal;
           if (!candidate.verify) return this._execute(
-            sessionRef, candidate, commandResults, actionSignal, actionConvergence,
+            sessionRef, candidate, commandResults, actionSignal, actionConvergence, secret,
           );
           const evidenced = await this._evidence.run({
             actionRef: actionId,
@@ -454,7 +472,7 @@ export class BrowserAutomation {
             }, { signal: actionSignal, commandResults, issueLocators: false, postconditionPlan: observationPlan,
               ...(eventWatermarks ? { eventWatermarks } : {}) }),
             effect: () => this._execute(
-              sessionRef, candidate, commandResults, actionSignal, actionConvergence,
+              sessionRef, candidate, commandResults, actionSignal, actionConvergence, secret,
             ),
           });
           return Object.freeze({ ...(evidenced.effectResult || {}), evidence: evidenced.evidence });
@@ -521,6 +539,24 @@ export class BrowserAutomation {
     return Object.freeze({ runId, state: "completed", actions: Object.freeze(completed), trace: trace.finish("completed") });
   }
 
+  async bindSecret(sessionRef, { value, locatorRef, origin, field }, { signal } = {}) {
+    this._authorizeAction("fill");
+    const issued = this._locators.get(locatorRef);
+    if (!issued || this._now() - issued.issuedAt > 30000) throw secretInputError("observe the secret field again before binding");
+    let exactOrigin;
+    try { exactOrigin = new URL(origin).origin; } catch { throw secretInputError("secret input needs an exact origin"); }
+    if (exactOrigin !== origin || !/^https?:\/\//.test(origin) || !["password", "username"].includes(field)
+      || typeof locatorRef !== "string") throw secretInputError("secret input needs its origin, field kind, and fresh locator");
+    const commands = [];
+    const target = await this._resolveOpaqueLocator(sessionRef, locatorRef, commands, signal, true);
+    try {
+      const checked = await this._callTargetFunction(sessionRef, target, SECRET_FIELD_FUNCTION,
+        [origin, field], commands, signal);
+      if (checked !== true) throw secretInputError("the current field does not match the secret's origin and kind");
+      return this.secrets.bind({ value, sessionKey: sessionKey(sessionRef), locatorRef, origin, field });
+    } finally { await this._releaseTarget(sessionRef, target, commands, signal, true); }
+  }
+
   /** Replace the allowed actions of a running host (the caller keeps them within what the host started with). */
   reviseActions(actions) {
     const next = new Set(actions);
@@ -532,6 +568,7 @@ export class BrowserAutomation {
   }
 
   dropSession(sessionRef) {
+    this.secrets.dropSession(sessionKey(sessionRef));
     this._quarantinedSessions.delete(sessionKey(sessionRef));
     this._clearSessionLocators(sessionKey(sessionRef));
     this._observation.dropSession(sessionRef);
@@ -547,6 +584,7 @@ export class BrowserAutomation {
   }
 
   close() {
+    this.secrets.close();
     this._observation.close();
     this._perception.close();
     this._lifecycle.close();
@@ -579,7 +617,7 @@ export class BrowserAutomation {
       `browser action is outside permission: ${kind}`, { outcome: "notSent" });
   }
 
-  async _execute(sessionRef, action, commandResults, signal, convergence = null) {
+  async _execute(sessionRef, action, commandResults, signal, convergence = null, secret = null) {
     const quarantine = this._quarantinedSessions.get(sessionKey(sessionRef));
     if (quarantine && BROWSER_AUTOMATION_ACTIONS[action.kind].risk === "externalEffect") {
       const error = automationError(BROWSER_AUTOMATION_ERROR_CODES.inputReleaseFailed,
@@ -604,7 +642,7 @@ export class BrowserAutomation {
       return this._storage(sessionRef, action, commandResults, signal);
     }
     if (action.kind === "press") return this._press(sessionRef, action, commandResults, signal, convergence);
-    return this._targetAction(sessionRef, action, commandResults, signal, convergence);
+    return this._targetAction(sessionRef, action, commandResults, signal, convergence, secret);
   }
 
   async _snapshot(sessionRef, action, commandResults, signal) {
@@ -725,6 +763,7 @@ export class BrowserAutomation {
         locatorRefs.add(locatorRef);
         this._locators.set(locatorRef, Object.freeze({
           sessionKey: key,
+          issuedAt: this._now(),
           contextEpoch: command.contextEpoch,
           backendNodeId: node.backendDOMNodeId,
           ...(framePath.length ? { framePath } : {}),
@@ -1022,7 +1061,7 @@ export class BrowserAutomation {
     return Object.freeze({ origin: url.origin, area: action.area, cleared: true });
   }
 
-  async _targetAction(sessionRef, action, commandResults, signal, convergence = null) {
+  async _targetAction(sessionRef, action, commandResults, signal, convergence = null, secret = null) {
     const prepared = await this._prepareTarget(sessionRef, action, commandResults, signal);
     try {
       let result;
@@ -1054,8 +1093,11 @@ export class BrowserAutomation {
       } else if (action.kind === "drag") {
         result = await this._dragTarget(sessionRef, prepared, action, commandResults, signal, convergence);
       } else if (action.kind === "fill") {
+        const value = secret ? secret.value : action.value;
+        if (!secret && prepared.status.type === "password" && value) this.secrets.remember(value);
         result = await this._callTargetFunction(
-          sessionRef, prepared.target, FILL_FUNCTION, [action.value], commandResults, signal, sendBoundary,
+          sessionRef, prepared.target, FILL_FUNCTION, [value, secret?.origin || "", secret?.field || ""],
+          commandResults, signal, sendBoundary,
         );
         if (result.contenteditable === true) {
           await this._effectCommand(
@@ -1197,6 +1239,9 @@ export class BrowserAutomation {
   }
 
   async _clickWithDownload(sessionRef, prepared, action, commandResults, signal, sendBoundary) {
+    if (this.secrets.sensitive) {
+      throw secretInputError("binary downloads are unavailable in a host that received secret input");
+    }
     if (!this._download) {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionDenied,
         "browser download capture is unavailable", { outcome: "notSent" });
@@ -1761,14 +1806,19 @@ export class BrowserAutomation {
 
   async _sendCommand(sessionRef, method, params, commandResults, signal, trustedRead, frame = null) {
     try {
-      const result = await this._port.send(sessionRef, {
+      if (this.secrets.sensitive && ["Page.captureScreenshot", "Page.printToPDF", "Network.getResponseBody"].includes(method)) {
+        throw secretInputError("binary capture is unavailable in a host that received secret input; use text observation");
+      }
+      const raw = await this._port.send(sessionRef, {
         method,
         params,
         expectedRisk: trustedRead ? "read" : BROWSER_CONTROL_COMMAND_RISKS[method],
       }, { signal, trustedRead, ...(frame || {}) });
+      const result = this.secrets.clean(raw);
       commandResults.push(Object.freeze({ method, result }));
       return result;
     } catch (error) {
+      this.secrets.cleanError(error);
       commandResults.push(Object.freeze({ method, error }));
       throw error;
     }
@@ -1791,7 +1841,7 @@ export class BrowserAutomation {
       this._sessionLocators.set(key, refs);
     }
     refs.add(locatorRef);
-    this._locators.set(locatorRef, Object.freeze({ sessionKey: key, contextEpoch, backendNodeId }));
+    this._locators.set(locatorRef, Object.freeze({ sessionKey: key, contextEpoch, backendNodeId, issuedAt: this._now() }));
     return locatorRef;
   }
 

@@ -301,8 +301,8 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
     properties: {
       ...TARGET_PROPERTIES,
       value: { type: "string", maxLength: 100000 },
+      secretRef: { type: "string", minLength: 1, maxLength: 100 },
     },
-    required: ["value"],
     target: "required",
   }),
   press: actionSpec({
@@ -532,7 +532,13 @@ export function validateBrowserAutomationAction(action) {
   if (action.kind === "storageSet") requireString(action.value, "storageSet.value", { min: 0, max: 100000 });
   if (["click", "hover", "focus", "check", "uncheck", "drag", "fill", "select", "scroll", "upload"].includes(action.kind)) validateTarget(action);
   if (action.kind === "press") validateTarget(action, { optional: true });
-  if (action.kind === "fill") requireString(action.value, "fill.value", { min: 0, max: 100000 });
+  if (action.kind === "fill") {
+    if (action.secretRef !== undefined) {
+      requireString(action.secretRef, "fill.secretRef", { max: 100 });
+      if (action.value !== undefined || !action.locatorRef) fail("secret fill needs only its bound locatorRef and secretRef");
+      if (action.actionContext !== undefined) fail("secret fill cannot reobserve and retry automatically");
+    } else requireString(action.value, "fill.value", { min: 0, max: 100000 });
+  }
   if (action.kind === "click" && action.dialog !== undefined) {
     requirePlainObject(action.dialog, "click.dialog");
     for (const key of Object.keys(action.dialog)) if (!["decision", "promptText"].includes(key)) fail(`click.dialog does not accept ${key}`);
@@ -589,6 +595,10 @@ export function createBrowserActionSchema(actionNames) {
       return {
         ...spec.schema,
         properties: { ...spec.schema.properties, kind: { type: "string", const: name } },
+        ...(name === "fill" ? { allOf: [{ oneOf: [
+          { required: ["value"], not: { required: ["secretRef"] } },
+          { required: ["secretRef", "locatorRef"], not: { anyOf: [{ required: ["value"] }, { required: ["actionContext"] }] } },
+        ] }] } : {}),
       };
     })),
   });

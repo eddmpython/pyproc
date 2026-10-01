@@ -17,7 +17,7 @@ const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "desktop", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "exportRoot", "externalEffects", "purpose", "artifacts", "viewport",
-  "recording", "trustedCertificates", "requests", "userBrowser", "permissionRevision",
+  "recording", "trustedCertificates", "requests", "userBrowser", "userBrowserProfile", "permissionRevision",
 ]);
 const RECORDING_KEYS = new Set([
   "mode", "file", "overwrite", "recordingId", "finalSha256", "startCursor", "prefixSha256",
@@ -38,7 +38,7 @@ const NATIVE_INSTALLATION_KEYS = new Set(["hostPath", "sha256", "sourceSha256", 
   "signature", "publicKey"]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_MACHINE_ENGINE", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
-  "PYPROC_AUTOMATION_PROVIDER", "PYPROC_USER_BROWSER",
+  "PYPROC_AUTOMATION_PROVIDER", "PYPROC_USER_BROWSER", "PYPROC_USER_BROWSER_PROFILE",
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_BROWSER_DESKTOP", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
   "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_REQUESTS", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
   "PYPROC_BROWSER_PERMISSION_REVISION",
@@ -228,11 +228,15 @@ function normalizedBrowser(input = { enabled: false }) {
     if (!["chrome", "edge"].includes(browser.userBrowser)) {
       throw new TypeError("browser.provider userBrowser requires browser.userBrowser chrome or edge");
     }
+    if (browser.userBrowserProfile !== undefined && (typeof browser.userBrowserProfile !== "string"
+      || !/^[A-Za-z0-9-]{1,64}$/.test(browser.userBrowserProfile))) {
+      throw new TypeError("browser.userBrowserProfile must be a profileId reported by user-browser status");
+    }
     for (const key of ["executable", "headed", "desktop", "gpu", "trustedCertificates"]) {
       if (browser[key] !== undefined) throw new TypeError(`browser.provider userBrowser does not accept browser.${key}`);
     }
-  } else if (browser.userBrowser !== undefined) {
-    throw new TypeError("browser.userBrowser needs browser.provider userBrowser");
+  } else if (browser.userBrowser !== undefined || browser.userBrowserProfile !== undefined) {
+    throw new TypeError("browser.userBrowser and browser.userBrowserProfile need browser.provider userBrowser");
   }
   if (browser.maxRisk !== undefined && typeof browser.maxRisk !== "string") {
     throw new TypeError("browser.maxRisk must be a string");
@@ -277,6 +281,7 @@ function normalizedBrowser(input = { enabled: false }) {
     enabled: true,
     provider,
     ...(provider === "userBrowser" ? { userBrowser: browser.userBrowser } : {}),
+    ...(browser.userBrowserProfile === undefined ? {} : { userBrowserProfile: browser.userBrowserProfile }),
     ...(browser.executable === undefined ? {} : { executable: resolve(browser.executable) }),
     headed,
     ...(desktop === "user" ? {} : { desktop }),
@@ -536,6 +541,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   env.PYPROC_BROWSER_CONTROL = "1";
   env.PYPROC_AUTOMATION_PROVIDER = browser.provider;
   if (browser.userBrowser) env.PYPROC_USER_BROWSER = browser.userBrowser;
+  if (browser.userBrowserProfile) env.PYPROC_USER_BROWSER_PROFILE = browser.userBrowserProfile;
   if (browser.executable) env.PYPROC_BROWSER = browser.executable;
   if (browser.headed) env.PYPROC_HEADED = "1";
   if (browser.desktop) env.PYPROC_BROWSER_DESKTOP = browser.desktop;

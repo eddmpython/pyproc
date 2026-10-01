@@ -1093,6 +1093,9 @@ export class PyProcControlClient {
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   act(sessionRef: ControlSessionRef, actions: readonly Readonly<Record<string, unknown>>[],
     options?: ControlRequestOptions): Promise<ControlResult<AutomationActOutput>>;
+  bindSecret(sessionRef: ControlSessionRef, binding: Readonly<{ value: string; locatorRef: string; origin: string;
+    field: "username" | "password" }>, options?: ControlRequestOptions):
+    Promise<ControlResult<Readonly<{ secretRef: string; expiresAt: string }>>>;
   command(sessionRef: ControlSessionRef, method: string, params: Readonly<Record<string, unknown>>,
     options: ControlRequestOptions & { readonly expectedRisk: string }): Promise<ControlResult>;
   detachSession(sessionRef: ControlSessionRef, options?: ControlRequestOptions): Promise<ControlResult>;

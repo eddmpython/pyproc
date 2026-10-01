@@ -82,7 +82,8 @@ function providerDescriptor(provider) {
   return Object.freeze({
     spaceId: provider.spaceId,
     providerKind: provider.providerKind,
-    operations: Object.freeze(provider.operations.filter((operation) => operation !== NOT_RECORDED)),
+    operations: Object.freeze(provider.operations.filter((operation) => operation !== NOT_RECORDED
+      && operation !== "automation.secret.bind")),
     capabilities: Object.freeze([...(provider.capabilities || [])]),
     restoreBoundary: "externalEffectsRemain",
     policy: Object.freeze({
@@ -134,7 +135,10 @@ export class RecordingSpace {
 
   async execute(operation, input, context) {
     this._assertWritable();
-    const persistedInput = context?.recordingInput === undefined ? input : context.recordingInput;
+    // Binding is a private memory transfer. A replay has no secret and cannot replay this operation.
+    if (operation === "automation.secret.bind") return this.provider.execute(operation, input, context);
+    const recordingInput = context?.recordingInput === undefined ? input : context.recordingInput;
+    const persistedInput = () => this.provider.clean ? this.provider.clean(recordingInput) : recordingInput;
     if (operation === "automation.space.inspect") {
       const output = await this.provider.execute(operation, input, context);
       return Object.freeze({ ...output, recording: this._status() });
@@ -144,7 +148,7 @@ export class RecordingSpace {
     catch (providerError) {
       const terminalError = canonicalControlError(providerError);
       try {
-        this._append(operation, persistedInput, { ok: false, error: terminalError }, [], []);
+        this._append(operation, persistedInput(), { ok: false, error: terminalError }, [], []);
         await this._persist();
       } catch (recordingError) {
         this._fatalError = recordingError;
@@ -155,7 +159,7 @@ export class RecordingSpace {
     try {
       if (operation === "artifact.read") this._collectArtifactChunk(output);
       const copied = recordingCopy(output, this.recording);
-      this._append(operation, persistedInput, { ok: true, output: copied.output }, copied.inlineArtifacts, copied.artifactRefs);
+      this._append(operation, persistedInput(), { ok: true, output: copied.output }, copied.inlineArtifacts, copied.artifactRefs);
       await this._persist();
     } catch (error) {
       this._fatalError = error;

@@ -67,7 +67,11 @@ and deletes the install.
 }
 ```
 
-`browser.userBrowser` is `chrome` or `edge`. The provider refuses `executable`, `headed`, `desktop`, `gpu`, and
+`browser.userBrowser` is `chrome` or `edge`. Set `browser.userBrowserProfile` to the exact `profileId` from
+`user-browser status` to bind a saved account to its profile. A missing, unpaired, or disconnected profile fails
+without trying another. Without this field, exactly one running paired profile must exist; several require a choice.
+The authenticated extension confirms its identity before any task tab opens.
+The provider refuses `executable`, `headed`, `desktop`, `gpu`, and
 `trustedCertificates` (the browser is the user's), and `requests: "safe"`: a read-only session needs browser-level
 request interception, which only a browser pyproc launched offers. Origins, actions, risk, and the effect
 acknowledgement work exactly as for `nativeCdp`.

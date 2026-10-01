@@ -8,6 +8,7 @@ export const AUTOMATION_SPACE_OPERATIONS = Object.freeze([
   "automation.command",
   "automation.session.detach",
   "automation.permission.revise",
+  "automation.secret.bind",
   "automation.observe",
   "automation.act",
   "artifact.read",

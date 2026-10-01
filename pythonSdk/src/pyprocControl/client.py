@@ -446,6 +446,12 @@ class PyProcClient:
             timeout: float | None = None) -> ControlResult:
         return self.request("automation.act", {"sessionRef": sessionRef, "actions": actions}, timeout=timeout)
 
+    def bindSecret(self, sessionRef: Mapping[str, Any], *, value: str, locatorRef: str, origin: str,
+                   field: str, timeout: float | None = None) -> ControlResult:
+        """Controller-only, one fill within 30 seconds in the observed field; never persisted or exposed to MCP."""
+        return self.request("automation.secret.bind", {"sessionRef": sessionRef, "value": value,
+                            "locatorRef": locatorRef, "origin": origin, "field": field}, timeout=timeout)
+
     def command(self, sessionRef: Mapping[str, Any], method: str, params: dict[str, Any], *, expectedRisk: str,
                 timeout: float | None = None) -> ControlResult:
         return self.request("automation.command", {"sessionRef": sessionRef, "method": method,

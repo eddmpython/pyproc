@@ -150,8 +150,12 @@ export async function assertUserBrowserContract() {
     actions: ["snapshot"] } };
   // Validation does not depend on the platform it runs on; the provider refuses to start outside Windows.
   assert.equal(validateMcpProductConfig(manifestBase).env.PYPROC_USER_BROWSER, "edge");
+  assert.equal(validateMcpProductConfig({ ...manifestBase, browser: { ...manifestBase.browser,
+    userBrowserProfile: "work-profile" } }).env.PYPROC_USER_BROWSER_PROFILE, "work-profile");
   for (const [change, message] of [
     [{ userBrowser: "firefox" }, /userBrowser chrome or edge/],
+    [{ userBrowserProfile: "../other" }, /profileId/],
+    [{ userBrowserProfile: "" }, /profileId/],
     [{ executable: resolve("browser.exe") }, /does not accept browser.executable/],
     [{ headed: true }, /does not accept browser.headed/],
     [{ requests: "safe" }, /nativeCdp/],
@@ -162,6 +166,6 @@ export async function assertUserBrowserContract() {
   }
   const misplaced = await errorOf(() => validateMcpProductConfig({ ...manifestBase,
     browser: { ...manifestBase.browser, provider: "nativeCdp" } }));
-  assert.match(String(misplaced?.message), /browser.userBrowser needs browser.provider userBrowser/);
+  assert.match(String(misplaced?.message), /need browser.provider userBrowser/);
   return true;
 }

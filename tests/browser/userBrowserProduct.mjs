@@ -48,6 +48,17 @@ let frameEffects = 0;
 const REPORT_PDF = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
   "latin1");
 const fixture = createServer((req, res) => {
+  if (req.url === "/account/connect") {
+    res.writeHead(200, { "Content-Type": "text/html", "Set-Cookie": "account=synthetic; HttpOnly; SameSite=Lax; Path=/" });
+    res.end("<title>Connected account</title><p>Session saved</p>");
+    return;
+  }
+  if (req.url === "/account/work") {
+    const authenticated = (req.headers.cookie || "").includes("account=synthetic");
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`<title>${authenticated ? "Account work ready" : "Sign in required"}</title><p>Account task</p>`);
+    return;
+  }
   if (req.url === "/frame-save" && req.method === "POST") {
     frameEffects += 1;
     res.writeHead(201, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -247,7 +258,8 @@ async function journey({ kind, product, executable }, installed, app) {
   const engine = kind === "edge" ? { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") }
     : { enabled: false };
   await writeFile(configPath, JSON.stringify({ schemaVersion: 1, engine, timeoutMs: TIMEOUT_MS,
-    browser: { enabled: true, provider: "userBrowser", userBrowser: kind, allowedOrigins: [origin, frameOrigin],
+    browser: { enabled: true, provider: "userBrowser", userBrowser: kind, userBrowserProfile: host.profileId,
+      allowedOrigins: [origin, frameOrigin],
       maxRisk: "externalEffect", actions: ["snapshot", "screenshot", "click"], methods: ["Runtime.evaluate"],
       externalEffects: "acknowledged", purpose: "Verify the user-browser provider fixture", artifacts: {},
       exportRoot: join(app.appDir, `exports-${kind}`) },
@@ -256,6 +268,7 @@ async function journey({ kind, product, executable }, installed, app) {
   const publicRequire = createRequire(join(app.appDir, "package.json"));
   const { PyProcControlClient } = await import(pathToFileURL(publicRequire.resolve("pyproc/control")).href);
   const controlScript = join(app.appDir, "node_modules", "pyproc", "scripts", "pyprocControl.mjs");
+  await profileJourney({ kind, executable, installed, app, host, configPath, PyProcControlClient, controlScript });
   client = await PyProcControlClient.start(configPath, { command: [process.execPath, controlScript],
     cwd: app.appDir, startupTimeoutMs: TIMEOUT_MS, shutdownTimeoutMs: 10000 });
   const space = (await client.inspectSpace()).output.space;
@@ -380,6 +393,55 @@ async function journey({ kind, product, executable }, installed, app) {
   const pairing = (await userBrowserStatus()).pairings.find((entry) => entry.profileId === host.profileId);
   check(`${label}a paired browser that is closed is still reported as paired, not running`,
     pairing?.browser === kind && pairing.running === false, JSON.stringify(pairing));
+}
+
+async function profileJourney({ kind, executable, installed, app, host, configPath, PyProcControlClient, controlScript }) {
+  const secondBrowser = launchBrowser("about:blank", { executable, enableExtensions: true, cdpPipe: true,
+    extraArgs: ["--enable-unsafe-extension-debugging"] });
+  const direct = CdpConnection.overPipe(secondBrowser.cdpPipe, { timeoutMs: 30000 });
+  let probe = null;
+  try {
+    await direct.send("Extensions.loadUnpacked", { path: installed.extensionPath });
+    const prefix = kind === "edge" ? "Edg/" : "Chrome/";
+    const secondHost = await waitFor(async () => (await listUserBrowserHosts()).find((entry) =>
+      entry.profileId !== host.profileId && entry.product.startsWith(prefix)), 30000);
+    if (!secondHost) throw new Error("second profile did not announce");
+    await writeFile(join(localAppData, "pyproc", "userBrowser", "pairing", `${secondHost.profileId}.key`),
+      JSON.stringify({ key, browser: kind, profileId: secondHost.profileId, product: secondHost.product }));
+    const base = JSON.parse(await readFile(configPath, "utf8"));
+    const probePath = join(app.appDir, `profile-${kind}.json`);
+    async function open(profileId, page) {
+      const browser = { ...base.browser };
+      delete browser.userBrowserProfile;
+      if (profileId) browser.userBrowserProfile = profileId;
+      await writeFile(probePath, JSON.stringify({ schemaVersion: 1, engine: { enabled: false }, browser }));
+      probe = await PyProcControlClient.start(probePath, { command: [process.execPath, controlScript],
+        cwd: app.appDir, startupTimeoutMs: TIMEOUT_MS });
+      return probe.openTarget(`${origin}${page}`, { expectedRisk: "externalEffect", waitUntil: "load" });
+    }
+    async function close() { await probe?.close(); probe = null; }
+    await open(host.profileId, "/account/connect");
+    await close();
+    const returned = await open(host.profileId, "/account/work");
+    check(`${kind}: the exact profile reuses its authenticated account after the task host restarts`,
+      returned.output.title === "Account work ready", JSON.stringify(returned.output));
+    await close();
+    const other = await open(secondHost.profileId, "/account/work");
+    check(`${kind}: selecting the other profile never inherits the first profile's account`,
+      other.output.title === "Sign in required", JSON.stringify(other.output));
+    await close();
+    for (const profileId of ["", "missing-profile"]) {
+      let denied = "";
+      try { await open(profileId, "/account/work"); } catch (error) { denied = String(error?.message || error); }
+      check(`${kind}: ${profileId || "ambiguous profile"} refuses without opening another profile`,
+        /select browser.userBrowserProfile|selected .* profile is not running or is not paired/.test(denied), denied);
+      await close();
+    }
+  } finally {
+    await probe?.close().catch(() => {});
+    direct.close();
+    secondBrowser.close();
+  }
 }
 
 try {

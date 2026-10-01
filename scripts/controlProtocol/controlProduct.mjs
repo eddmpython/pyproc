@@ -253,7 +253,8 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   const frameToolProvider = providerKind === "frame"
     || (providerKind === "replay" && replayRecording.provider.providerKind === "frame");
   const browserTools = browserConfig
-    ? (frameToolProvider ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig)) : [];
+    ? (frameToolProvider ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig))
+      .filter((tool) => providerKind !== "replay" || tool.name !== "browserBindSecret") : [];
   const verificationTools = browserEnabled ? VERIFICATION_TOOLS : VERIFICATION_OFFLINE_TOOLS;
   const executionMemoryEnabled = !!env.PYPROC_EXECUTION_MEMORY_ROOT;
   const memoryTools = executionMemoryEnabled ? EXECUTION_MEMORY_TOOLS : [];
@@ -331,7 +332,8 @@ export async function createControlProduct({ env = process.env, browserLauncher 
               cursor: recordingConfig.startCursor || 0,
               prefixSha256: recordingConfig.prefixSha256 || null })
           : providerKind === "userBrowser"
-            ? new UserBrowserSpace({ profileDir: userBrowserScratch, config: browserConfig, browser: userBrowser })
+            ? new UserBrowserSpace({ profileDir: userBrowserScratch, config: browserConfig, browser: userBrowser,
+                profileId: env.PYPROC_USER_BROWSER_PROFILE || "" })
             : new NativeCdpSpace({ profileDir: browserSession.profile, cdpPipe: browserSession.cdpPipe,
                 config: browserConfig })) : null;
     if (automationSpace && recordingConfig?.mode === "record") {

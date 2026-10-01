@@ -124,31 +124,37 @@ function hostsOf(hosts, browser) {
  * Connect to the paired extension of `browser` and authenticate with the stored pairing key. Returns the flat-CDP
  * connection and the host it reached.
  */
-export async function openUserBrowserConnection({ browser, timeoutMs = 30000, env = process.env } = {}) {
-  const candidates = hostsOf(await listUserBrowserHosts({ env }), browser);
+export async function openUserBrowserConnection({ browser, profileId = "", timeoutMs = 30000, env = process.env } = {}) {
+  if (typeof profileId !== "string" || (profileId && !/^[A-Za-z0-9-]{1,64}$/.test(profileId))) {
+    throw new TypeError("userBrowser.profileId must be a profileId reported by user-browser status");
+  }
+  const candidates = hostsOf(await listUserBrowserHosts({ env }), browser)
+    .filter((host) => !profileId || host.profileId === profileId);
   const paired = [];
   for (const host of candidates) {
     const key = await readKey(env, host.profileId);
     if (key) paired.push({ host, key });
   }
   if (!paired.length) {
+    if (profileId) throw new Error(`the selected ${browser} profile is not running or is not paired`);
     throw new Error(candidates.length
       ? `no ${browser} profile is paired; run pyproc-control user-browser pair --browser ${browser}`
       : `${browser} is not running the pyproc User Browser extension (or its native host is not registered)`);
   }
-  let lastError = null;
-  for (const { host, key } of paired) {
-    let connection = null;
-    try {
-      connection = new CdpConnection(userBrowserPipeChannel(await openPipe(host.pipeName, 5000)), { timeoutMs });
-      const hello = await connection.send("PyprocUserBrowser.hello", { key });
-      return Object.freeze({ connection, host, product: hello.product, protocolVersion: hello.protocolVersion });
-    } catch (error) {
-      connection?.close();
-      lastError = error;
+  if (paired.length > 1) throw new Error(`several ${browser} profiles are paired; select browser.userBrowserProfile`);
+  const [{ host, key }] = paired;
+  const connection = new CdpConnection(userBrowserPipeChannel(await openPipe(host.pipeName, 5000)), { timeoutMs });
+  try {
+    const hello = await connection.send("PyprocUserBrowser.hello", { key });
+    const status = await connection.send("PyprocUserBrowser.status");
+    if (status.profileId !== host.profileId || !status.authorized || status.product !== hello.product) {
+      throw new Error("the user browser did not confirm the selected profile");
     }
+    return Object.freeze({ connection, host, product: hello.product, protocolVersion: hello.protocolVersion });
+  } catch (error) {
+    connection.close();
+    throw error;
   }
-  throw lastError;
 }
 
 /** Ask the extension of `browser` to pair; the user confirms by clicking its action. The key is kept on success. */

@@ -13,7 +13,7 @@ async function errorOf(operation) {
 }
 
 export async function assertAutomationSpaceContract() {
-  assert.equal(AUTOMATION_SPACE_OPERATIONS.length, 12);
+  assert.equal(AUTOMATION_SPACE_OPERATIONS.length, 13);
   const calls = [];
   const provider = {
     spaceId: "space:contract",

@@ -105,6 +105,7 @@ with live permission revision) and `verification.audit` appear:
 | `automation.session.attach` | Create an opaque controlled session |
 | `automation.observe` | Return or continue a bounded legacy semantic inventory, APX graph, or goal-specific SituationCapsule |
 | `automation.act` | Run an ordered high-level action pipeline |
+| `automation.secret.bind` | Controller-only: bind a secret to one observed login field for a single fill within 30 seconds; unavailable over MCP and in replay |
 | `automation.command` | Send one separately allowlisted low-level command |
 | `automation.session.detach` | Drop session-owned state and detach |
 | `automation.permission.revise` | Replace the running browser permission (only when the manifest sets `browser.permissionRevision: "controller"`; widening needs the caller's approval reference) |
@@ -134,6 +135,20 @@ and the returned `continuationRef` until `inventory.complete` is true. Each toke
 original provider, session, snapshot, document epoch, ordering, full digest, and evidence receipt. A caller must
 not infer completeness from `truncated` or from a short final page. Document replacement is the canonical
 `AUTOMATION_OBSERVATION_CONTINUATION_STALE` error with `notSent` and no partial-success terminal.
+
+For saved login fields, the controller calls `bindSecret(sessionRef, {value, locatorRef, origin, field})`, where
+`field` is `username` or `password` and `locatorRef` came from an observation in the last 30 seconds. The exact origin
+must match the field's document; the field must be an input of the right kind. Use the returned `secretRef` in
+`{kind: "fill", expectedRisk: "externalEffect", locatorRef, secretRef}`. No `value` or `actionContext` accompanies it.
+The binding is consumed on its first attempt, expires after 30 seconds, and cannot cross sessions or fields.
+The input checks the field and origin again immediately before writing, including after focus handlers ran.
+
+Binding input is never recorded. Responses and later text observations redact the supplied values and their URL
+encoding, including page echoes. Values remain only in a bounded host-memory redactor until the host closes so late
+echoes stay protected. Raw commands and binary artifacts are unavailable in that host after a binding or a literal
+password fill, including declared click downloads: image pixels cannot be reliably redacted as text. Continue with semantic observations; an authenticated
+user-browser profile can be reopened in a fresh host for visual tasks without copying its credentials. A website at
+the approved login origin receives the actual value, so that origin is a trust decision owned by the caller.
 
 The additive `resources` object on `automation.space.inspect` is a point-in-time cleanup receipt. It reports
 target, session, locator, continuation, watcher, artifact, perception ledger, transport session, pending command,

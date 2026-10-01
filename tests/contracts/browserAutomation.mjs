@@ -19,6 +19,7 @@ import { NodeCdpTransport } from "../../scripts/browserControl/nodeCdpTransport.
 import { redactBrowserUrl } from "../../scripts/browserControl/browserObservation.js";
 import { BrowserArtifactStore } from "../../scripts/browserControl/browserArtifactStore.js";
 import { SemanticInventory } from "../../scripts/automationSpace/semanticInventory.js";
+import { BrowserSecretInput } from "../../scripts/browserControl/browserSecretInput.js";
 import {
   browserActionabilityFingerprint,
   mapViewportPointToQuad,
@@ -199,6 +200,30 @@ class FakePort {
 }
 
 export async function assertBrowserAutomationContract() {
+  let secretClock = 1000;
+  let secretSequence = 0;
+  const secrets = new BrowserSecretInput({ now: () => secretClock, idFactory: () => `test-${++secretSequence}` });
+  const secret = { value: "fixture-credential-42", sessionKey: "session:a", locatorRef: "locator:a",
+    origin: "https://account.example", field: "password" };
+  assert(await errorOf(() => secrets.bind({ ...secret, value: "\ud800" })), "malformed Unicode disabled the output redactor");
+  let bound = secrets.bind(secret);
+  assert(secrets.consume(bound.secretRef, secret.sessionKey, secret.locatorRef).value === secret.value,
+    "secret binding does not supply the exact one-shot value");
+  assert((await errorOf(() => secrets.consume(bound.secretRef, secret.sessionKey, secret.locatorRef)))?.outcome === "notSent",
+    "consumed secret binding was reused");
+  bound = secrets.bind(secret);
+  assert(await errorOf(() => secrets.consume(bound.secretRef, "session:b", secret.locatorRef)), "another session consumed the binding");
+  assert(await errorOf(() => secrets.consume(bound.secretRef, secret.sessionKey, secret.locatorRef)), "a refused attempt kept its binding");
+  bound = secrets.bind(secret);
+  secretClock += 30001;
+  assert(await errorOf(() => secrets.consume(bound.secretRef, secret.sessionKey, secret.locatorRef)), "expired binding was accepted");
+  bound = secrets.bind(secret);
+  secrets.dropSession(secret.sessionKey);
+  assert(await errorOf(() => secrets.consume(bound.secretRef, secret.sessionKey, secret.locatorRef)), "closed session kept a binding");
+  assert(!JSON.stringify(secrets.clean({ text: `echo ${secret.value}`, url: encodeURIComponent(secret.value) })).includes(secret.value),
+    "consumption or session close removed output protection too soon");
+  secrets.close();
+  assert(!secrets.sensitive && secrets.pending.size === 0, "control host close retains secret state");
   let inventoryNow = 1000;
   let inventoryId = 0;
   const boundedInventory = new SemanticInventory({ idFactory: () => `contract-${++inventoryId}`,

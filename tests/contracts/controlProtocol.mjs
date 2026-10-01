@@ -127,10 +127,10 @@ export async function assertControlProtocolContract() {
   "JS control client의 cancel write 실패와 원 request가 canonical outcome으로 함께 닫히지 않았다");
 
   const mapped = Object.entries(CONTROL_TOOL_OPERATIONS);
-  assert(mapped.length === 65 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
-    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 65종 mapping이 양방향이 아니다");
+  assert(mapped.length === 66 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
+    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 66종 mapping이 양방향이 아니다");
   const catalog = controlOperationCatalog(mapped.map(([name]) => ({ name, inputSchema: { type: "object" } })));
-  assert(catalog.length === 65 && catalog.every((entry) => entry.operationVersion === 1),
+  assert(catalog.length === 66 && catalog.every((entry) => entry.operationVersion === 1),
     "control operation catalog가 versioned 65종이 아니다");
   const withoutSnapshotTools = createBrowserControlTools({ actions: ["screenshot"] });
   const withoutSnapshotCatalog = controlOperationCatalog(withoutSnapshotTools);
@@ -141,6 +141,10 @@ export async function assertControlProtocolContract() {
   "snapshot 권한 없이 MCP와 Control Protocol에 observe가 노출됐다");
   // Permission revision is offered only to a controller host that opts in, and never to an agent over MCP.
   const controllerTools = createBrowserControlTools({ actions: ["snapshot"], permissionRevision: "controller" });
+  const secretTools = createBrowserControlTools({ actions: ["fill"] });
+  assert(secretTools.some((tool) => tool.name === "browserBindSecret")
+    && !createBrowserControlTools({ actions: ["fill"], requests: "safe" }).some((tool) => tool.name === "browserBindSecret")
+    && CONTROLLER_ONLY_TOOLS.includes("browserBindSecret"), "secret input is not restricted to a write-capable controller");
   assert(controllerTools.some((tool) => tool.name === "browserRevisePermission")
     && !withoutSnapshotTools.some((tool) => tool.name === "browserRevisePermission")
     && CONTROLLER_ONLY_TOOLS.includes("browserRevisePermission"),

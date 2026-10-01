@@ -1,5 +1,6 @@
 // mcpBrowserControl.js - browser env config, MCP schema, dispatch adapter의 SSOT.
 import { BrowserAutomation } from "./browserAutomation.js";
+import { secretInputError } from "./browserSecretInput.js";
 import {
   BROWSER_AUTOMATION_ACTIONS,
   BROWSER_AUTOMATION_DEFAULT_ACTIONS,
@@ -462,6 +463,17 @@ export function createBrowserControlTools(config) {
       },
     });
   }
+  if (config.actions.includes("fill") && config.requests !== "safe") tools.push({
+    name: "browserBindSecret",
+    description: "Controller-only: bind a secret to one freshly observed field for one fill within 30 seconds. Never recorded or exposed to MCP.",
+    inputSchema: {
+      type: "object",
+      properties: { sessionRef: BROWSER_SESSION_SCHEMA, value: { type: "string", minLength: 1, maxLength: 4096 },
+        locatorRef: { type: "string", minLength: 1 }, origin: { type: "string", minLength: 1 },
+        field: { type: "string", enum: ["username", "password"] } },
+      required: ["sessionRef", "value", "locatorRef", "origin", "field"], additionalProperties: false,
+    },
+  });
   tools.push({
     name: "browserAct",
     description: `Run 1 to ${BROWSER_AUTOMATION_MAX_ACTIONS} ordered high-level actions in one MCP call. Stops on the first failure and reports the completed prefix.`,
@@ -581,7 +593,21 @@ export class McpBrowserControl {
       throw permissionError("browser operation requires a current authorization token");
     }
     this._authorities.delete(authority);
+    try {
+      return this.clean(await this._invoke(tool, args, signal));
+    } catch (error) {
+      throw this._automation?.secrets.cleanError(error) || error;
+    }
+  }
+
+  clean(value) { return this._automation?.secrets.clean(value) ?? value; }
+
+  async _invoke(tool, args, signal) {
     const { broker, automation, artifactStore } = await this._ready();
+    if (automation.secrets.sensitive && ["browserCommand", "browserArtifactRead"].includes(tool)) {
+      throw secretInputError("raw commands and binary artifacts are unavailable after secret input; use text observation");
+    }
+    if (tool === "browserBindSecret") return automation.bindSecret(args.sessionRef, args, { signal });
     if (tool === "browserInspect") {
       await artifactStore.reap();
       const automationInspection = automation.inspect();

@@ -21,6 +21,7 @@ export function userBrowserTargets(connection) {
 
 export async function connectUserBrowserControl({
   browser,
+  profileId = "",
   targetOrigins,
   methods,
   events = [],
@@ -36,7 +37,7 @@ export async function connectUserBrowserControl({
   assertBrowserRequestScope({ requests, targetOrigins });
   if (requests !== "any") throw new TypeError("a user browser session cannot be read-only");
   const policy = new BrowserControlPolicy({ targetOrigins, methods, events, fileRoots, downloadRoot, maxRisk });
-  const { connection, product, protocolVersion } = await openUserBrowserConnection({ browser, timeoutMs, env });
+  const { connection, product, protocolVersion } = await openUserBrowserConnection({ browser, profileId, timeoutMs, env });
   try {
     const compatibility = assertBrowserCompatibility({ protocolVersion, product });
     const port = new BrowserControlPort({ transport: new UserBrowserTransport(connection), policy });

@@ -4,6 +4,7 @@
 
 | Current boundary | Shipped contract | Remaining work |
 | --- | --- | --- |
+| Secret input disables binary reads in its host | One-use input is bound to an observed field, session and origin. Text output and recording redact exact values and URL encoding. Raw commands, image capture and declared downloads are refused after secret input | Arbitrary site encodings and image pixels are not a text-redaction guarantee. Use an already authenticated user-browser profile for visual tasks and downloads; credential storage and the login-origin trust decision remain the caller's responsibility |
 | Chromium and Edge only | owned kernel boot requires cross-origin isolation and SharedArrayBuffer | 다른 browser가 동등한 worker shared-memory 계약을 제공할 때 재검증한다 |
 | Dynamic native wheels unsupported | pure Python wheel과 source-pinned package-owned facade 및 NumPy를 exact engine과 curated static native profile에 묶어 install 전에 검증한다 | profile 확대는 source build, oracle, reproducibility와 size gate가 있어야 하며 임의 binary wheel은 dynamic linking 전까지 받지 않는다 |
 | Scientific package reach incomplete | 별도 `data-3` engine과 multi-wheel catalog가 실제 `wasm-simd128` float64 oracle과 source-built NumPy 2.5.1의 array, dot, FFT, linalg, seeded random을 실행한다. package clone과 Machine image도 같은 layer를 복원한다 | SciPy, pandas, Polars는 명시적 미포함이다. C++ exception 비활성과 allocation 또는 PocketFFT invariant 위반 abort 경계를 유지한 채 source-pinned profile을 하나씩 넓힌다 |

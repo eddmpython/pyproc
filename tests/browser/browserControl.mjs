@@ -187,7 +187,8 @@ try {
     && inspected.space?.spaceId === "space:native" && inspected.space?.providerKind === "nativeCdp"
     && inspected.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception,actionConvergence"
     && inspected.space?.restoreBoundary === "externalEffectsRemain"
-    && inspected.space?.replayBoundary === "recordOnly" && inspected.space?.operations?.length === 11,
+    && inspected.space?.replayBoundary === "recordOnly" && inspected.space?.operations?.length === 12
+    && inspected.space.operations.includes("automation.secret.bind"),
   `${inspected.automation?.actions?.length} actions`);
 
   const openWithoutRisk = await callTool("browserOpen", { url: targetUrl });

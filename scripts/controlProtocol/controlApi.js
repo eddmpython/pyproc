@@ -496,6 +496,9 @@ export class PyProcControlClient extends ControlStdioClient {
   act(sessionRef, actions, options = {}) {
     return this.request("automation.act", { sessionRef, actions }, options);
   }
+  bindSecret(sessionRef, { value, locatorRef, origin, field }, options = {}) {
+    return this.request("automation.secret.bind", { sessionRef, value, locatorRef, origin, field }, options);
+  }
   command(sessionRef, method, params, { expectedRisk, ...options } = {}) {
     return this.request("automation.command", { sessionRef, method, params, expectedRisk }, options);
   }

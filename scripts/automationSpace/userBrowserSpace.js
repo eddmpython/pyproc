@@ -17,9 +17,9 @@ export const USER_BROWSER_CAPABILITIES = Object.freeze([
 ]);
 
 export class UserBrowserSpace extends BrowserControlSpace {
-  constructor({ profileDir, config, browser, auditWriter, spaceId = "space:userBrowser" } = {}) {
+  constructor({ profileDir, config, browser, profileId = "", auditWriter, spaceId = "space:userBrowser" } = {}) {
     const implementation = new McpBrowserControl({ profileDir, config, auditWriter, providerKind: "userBrowser",
-      brokerFactory: (options) => connectUserBrowserControl({ ...options, browser }) });
+      brokerFactory: (options) => connectUserBrowserControl({ ...options, browser, profileId }) });
     super(implementation, { spaceId });
     this.config = config;
     this.browser = browser;
