@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:4c44b7da6ba2c5556730ca69119e7aca710db6dbdaac86856c6fceb5e4819a26",
-  "catalogDigest": "sha256:4ed641ffc55029185239def92e1de194b70b8d61bdfcc5ce5dff74c8b614222c",
+  "generatedFromDigest": "sha256:d2b9d776988b7fd8451fe33d782fb3ccc06b436fbda33affe7a40fbef97d75b6",
+  "catalogDigest": "sha256:b888257718d07a17008cb20cb14876b9528b9757543d57862955d3853b16ba35",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -275,8 +275,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/user-browser.md",
-      "bytes": 8672,
-      "sha256": "sha256:01ba89573b2dcf5a7ce6a99e6800b14558b055c5918b8b20fdf5f554b706da0a"
+      "bytes": 9042,
+      "sha256": "sha256:ba9e81884ae166d6bf848fc8e998992eb87235b607fed4d74a0797e2949dd63f"
     },
     {
       "path": "skills/benchmark-pyproc/references/benchmarking.md",
@@ -290,8 +290,8 @@
     },
     {
       "path": "skills/control-pyproc/references/control-protocol.md",
-      "bytes": 20705,
-      "sha256": "sha256:551846079127c1fbfd0119a4d97c0f8bd9b09b02fade5ecc23ed546f33c90f96"
+      "bytes": 22271,
+      "sha256": "sha256:2bf11ffc0167d81e3d2379941f10e3d35c912cd673465c9994ff9b9109420299"
     },
     {
       "path": "skills/control-pyproc/references/javascript-control.md",
@@ -320,8 +320,8 @@
     },
     {
       "path": "skills/evolve-pyproc/references/contract-reality.md",
-      "bytes": 5893,
-      "sha256": "sha256:729553c73af44ab5c8da0e3208f89f1693fb390ff1405122a807dc40c3bf5ed2"
+      "bytes": 6409,
+      "sha256": "sha256:bf44a6c15e6764c35f5923f88d698b9d84575b862514369d9076da0d296dfc6f"
     },
     {
       "path": "skills/evolve-pyproc/references/experimental-freeze.md",
