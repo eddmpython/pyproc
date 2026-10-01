@@ -12,6 +12,29 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.35 - 2026-10-01
+
+### Added
+
+- **Exact user-browser profiles.** `browser.userBrowserProfile` selects one paired Chrome or Edge profile. Missing
+  or ambiguous profiles refuse instead of selecting another identity. Each task stays inside its permitted sites
+  and reuses the selected browser's existing login without exporting cookies.
+- **One-use login input.** `automation.secret.bind` binds a supplied login value to a freshly observed field, its
+  session and exact origin. The binding expires after 30 seconds and is consumed by its first attempt. Changes
+  during focus, cross-session use, wrong origins and reused references refuse before input. JavaScript and Python
+  Control clients expose the operation; MCP and replay do not accept it.
+- **Secret-bearing host limits.** Supplied values are redacted from action responses, semantic observations and
+  recording, including later page echoes and URL encoding. Raw commands, screenshots and declared binary downloads
+  refuse in a host that has received secret input. An already authenticated user-browser profile retains visual and
+  download capabilities. The caller owns its account vault, site permissions and additional authentication UI.
+
+### 한국어
+
+연결한 Chrome·Edge의 정확한 프로필을 선택하고 로그인 상태를 재사용한다. 저장한 로그인 값은 관찰한 필드 한
+곳에 한 번만 입력하며 응답과 기록에서 가린다. 비밀 입력 후에는 바이너리 읽기를 제한하므로 화면 확인과
+다운로드가 필요한 업무는 이미 로그인한 사용자 브라우저 연결을 사용한다. 계정 저장소, 사이트 권한과 추가
+인증 화면은 호출자가 관리한다.
+
 ## 0.0.34 - 2026-10-01
 
 ### Added
