@@ -12,7 +12,7 @@ import {
   inspectBrowserAutomationActions,
 } from "./browserAutomationCatalog.js";
 import { connectNodeBrowserControl } from "./browserControlBroker.mjs";
-import { assertBrowserRequestScope } from "./requestGuard.mjs";
+import { assertBrowserRequestScope, normalizeBlockedHosts } from "./requestGuard.mjs";
 import {
   ANY_TARGET_ORIGIN,
   BROWSER_CONTROL_COMMAND_RISKS,
@@ -206,6 +206,8 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   const targetOrigins = Object.freeze(parseOrigins(env.PYPROC_BROWSER_ALLOWED_ORIGINS));
   const requests = env.PYPROC_BROWSER_REQUESTS || "any";
   assertBrowserRequestScope({ requests, targetOrigins });
+  // Exact hosts the session never reaches; no permission revision changes them.
+  const blockedHosts = normalizeBlockedHosts(csv(env.PYPROC_BROWSER_BLOCKED_HOSTS));
   const permissionRevision = env.PYPROC_BROWSER_PERMISSION_REVISION || "off";
   if (!["off", "controller"].includes(permissionRevision)) {
     throw new Error(`invalid PYPROC_BROWSER_PERMISSION_REVISION: ${permissionRevision}`);
@@ -213,6 +215,7 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   return Object.freeze({
     targetOrigins,
     requests,
+    blockedHosts,
     permissionRevision,
     trustedCertificates: parseTrustedCertificateEnvironment(env.PYPROC_BROWSER_TRUSTED_CERTIFICATES, targetOrigins),
     rawMethods: Object.freeze(rawMethods),
@@ -519,9 +522,10 @@ export function createBrowserControlTools(config) {
   return Object.freeze(tools.map((tool) => Object.freeze(tool)));
 }
 
-// In read-only mode every observe and act result says which requests the browser refused since the last one, so an
-// agent learns that its click tried to change the site instead of seeing a page that silently did not change. A
-// request an action set off can still be on its way when the action returns; it then comes with the next result.
+// In read-only mode, or with blocked hosts, every observe and act result says which requests the browser refused
+// since the last one (a refusal for its host names it as `blockedHost`), so an agent learns that its click tried to
+// change the site or reach a blocked host instead of seeing a page that silently did not change. A request an action
+// set off can still be on its way when the action returns; it then comes with the next result.
 // Actions that can set off a navigation or a form submission.
 const SETTLING_ACTIONS = new Set(["click", "press", "select", "navigate"]);
 
@@ -732,6 +736,7 @@ export class McpBrowserControl {
         timeoutMs: this.config.timeoutMs,
         viewport: this.config.viewport,
         requests: this.config.requests,
+        blockedHosts: this.config.blockedHosts || [],
       });
     }
     const broker = await this._brokerPromise;

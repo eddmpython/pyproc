@@ -31,11 +31,15 @@ export async function connectUserBrowserControl({
   timeoutMs = 30000,
   viewport = null,
   requests = "any",
+  blockedHosts = [],
   holdOutside = false,
   env = process.env,
 } = {}) {
   assertBrowserRequestScope({ requests, targetOrigins });
   if (requests !== "any") throw new TypeError("a user browser session cannot be read-only");
+  // The extension cannot refuse a request before it is sent, so a session that must never reach a host does not run
+  // in the user's own browser.
+  if (blockedHosts.length) throw new TypeError("a user browser session cannot block hosts");
   const policy = new BrowserControlPolicy({ targetOrigins, methods, events, fileRoots, downloadRoot, maxRisk });
   const { connection, product, protocolVersion } = await openUserBrowserConnection({ browser, profileId, timeoutMs, env });
   try {

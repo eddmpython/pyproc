@@ -140,6 +140,7 @@ and incomplete external-effect approval fail closed.
 | `browser.exportRoot` | Optional absolute folder (`nativeCdp` or `userBrowser`) that each declared click download is also written into, as a new file the receipt names. Created when the first download is written. Never widened at runtime |
 | `browser.trustedCertificates` | Optional `{origin,certificate,spkiSha256?}` list for self-signed local HTTPS targets. Each origin is an exact loopback HTTPS origin in `allowedOrigins`, and the absolute PEM certificate must name its host and be inside its validity period. Only its public key is trusted |
 | `browser.requests` | `any` by default. `safe` makes a read-only session, only in a browser-only host (`engine.enabled: false`) with the `nativeCdp` provider: the browser itself refuses every request other than GET, HEAD, and OPTIONS, every WebSocket and WebTransport, and every download, from pages, frames, closing tabs, and workers |
+| `browser.blockedHosts` | Optional list of at most 64 exact host names (no scheme, port, path, or pattern; a subdomain is a different host) the session never reaches, with either request mode, `nativeCdp` provider only. The browser refuses every request whose host is one of them before it is sent: a navigation, each redirect hop, a subresource, a frame, a new tab, a worker. Never changed by a permission revision |
 | `browser.externalEffects` | Must equal `acknowledged` when `maxRisk` is `externalEffect` |
 | `browser.purpose` | Required printable purpose for an external-effect configuration |
 | `browser.artifacts` | Optional disk, count, inline, and TTL limits described below |
@@ -172,6 +173,17 @@ not fit. After a click, press, select, or navigate, the act waits briefly for th
 be decided, so its refusal comes with that act's result. `automation.space.inspect` reports the mode and counts under `requests`.
 `allowedOrigins: ["*"]` (every http(s) site, as the only entry) is accepted only for a read-only session, which cannot
 also be recorded.
+
+A session with `browser.blockedHosts` refuses every request to those hosts on the same browser connection, so a link,
+a redirect, or a page script cannot reach one before the caller sees where it led. The host compared is the one the
+browser canonicalized (a backslash, a full-width letter, or an ideographic dot is already resolved), without a trailing
+dot. A refused navigation fails as blocked by the client: the tab shows the browser's error page at that address, and
+`automation.target.open` fails with `BROWSER_CONTROL_PERMISSION_DENIED` whose details name the `origin`, `path`, and
+`blockedHost` (a start URL on a blocked host is refused before anything is sent). Each refusal appears in
+`blockedRequests` with its `blockedHost`. Its fresh profile starts with page preloading off, as a read-only session's
+does. With `requests: "any"` only addresses naming a blocked host are intercepted and pages are otherwise unchanged; a
+WebSocket is not a request there and is not refused (a read-only session refuses every socket anyway). The
+user-browser provider cannot refuse a request before it is sent, so it refuses `blockedHosts`.
 
 FrameSpace supports a smaller action catalog and requires `browser.methods` to be empty. Its exact setup,
 sandbox, screenshot, and credentialless-session limits are in the [FrameSpace guide](./frame-space.md).

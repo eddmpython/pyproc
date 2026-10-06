@@ -30,10 +30,25 @@
 // browser reports those as policy issues). A socket a worker tried to open is refused without a report.
 // A read-only session runs only in a browser-only host with the nativeCdp provider (`assertBrowserRequestHost`); the
 // Python Machine page would share its browser and need an exemption this guard does not make.
+//
+// Blocked hosts: a session of either mode may name exact host names it never reaches (`browser.blockedHosts`). The
+// same interception on the browser connection refuses every request to one of them before it is sent, whatever its
+// method and whoever sends it: a navigation, each hop of a redirect, a subresource, a frame, a new tab, a worker. The
+// host compared is the one the browser itself canonicalized (a backslash, a full-width letter, or an ideographic dot
+// is already resolved), without a trailing dot. A refused navigation fails as blocked by the client, so the tab shows
+// the browser's error page at that address and nothing was asked of the host; every refusal is reported with the host
+// it named. A session that only blocks hosts (requests "any") intercepts only requests whose address names one of them
+// and changes nothing else about its pages. Sockets are not requests: in a read-only session every socket is refused
+// anyway, while a session with requests "any" does not refuse a socket to a blocked host. Only the nativeCdp provider
+// installs this interception (`assertBrowserRequestHost`).
 
 import { ANY_TARGET_ORIGIN } from "./browserControlPolicy.js";
 
 export const BROWSER_REQUEST_MODES = Object.freeze(["any", "safe"]);
+// Hosts one session may block: a short list of exact names, not a filter language.
+export const BLOCKED_HOSTS_MAX = 64;
+// Characters a bare host name never holds: a scheme, port, path, query, fragment, credentials, escape, or pattern.
+const NOT_A_HOST_NAME = /[\s/\\?#@:%*[\]\u0000-\u001f\u007f]/;
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const CONTAINER_TYPES = new Set(["tab", "browser"]);
@@ -104,11 +119,53 @@ export function assertBrowserRequestScope({ requests, targetOrigins }) {
   }
 }
 
+// The exact host names a session never reaches, in the one form the browser asks for them: lowercase, punycode, no
+// trailing dot, each once, in the given order. A blocked host is a name, never a URL, a pattern, or a parent domain
+// that would cover its subdomains: a caller names every host it blocks.
+export function normalizeBlockedHosts(values) {
+  if (!Array.isArray(values)) throw new TypeError("blockedHosts must be a list of host names");
+  const hosts = new Set();
+  for (const value of values) {
+    const name = typeof value === "string" ? value.trim().replace(/\.$/, "") : "";
+    const refused = () => new TypeError(`blockedHosts entry must be one host name: ${JSON.stringify(value)}`);
+    if (!name || NOT_A_HOST_NAME.test(name)) throw refused();
+    let parsed;
+    try { parsed = new URL(`https://${name}/`); } catch { throw refused(); }
+    const host = parsed.hostname.replace(/\.$/, "");
+    if (parsed.port || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash
+      || !host || host.split(".").some((label) => !label)) throw refused();
+    hosts.add(host);
+  }
+  if (hosts.size > BLOCKED_HOSTS_MAX) throw new TypeError(`at most ${BLOCKED_HOSTS_MAX} blocked hosts`);
+  return Object.freeze([...hosts]);
+}
+
+// The blocked host a URL asks for (one of `hosts`, a Set from `normalizeBlockedHosts`), or "". A request URL the
+// browser reports is already canonical, so its host only loses a trailing dot; a URL without a host names none.
+function blockedHostOf(url, hosts) {
+  if (!hosts.size) return "";
+  let host;
+  try { host = new URL(String(url || "")).hostname.replace(/\.$/, ""); } catch { return ""; }
+  return hosts.has(host) ? host : "";
+}
+
+// Request patterns that pause every request whose address could name one of `hosts`: a canonical address holds its
+// host verbatim, so a pattern around the name never misses one; one it pauses elsewhere is let through by the exact
+// host check.
+function hostPatterns(hosts) {
+  return Object.freeze(hosts.map((host) => Object.freeze({ urlPattern: `*${host}*`, requestStage: "Request" })));
+}
+
 // Where a read-only session can run: only the nativeCdp provider installs the guard, the Python Machine page would
-// share the browser, and a recording of a "*" session could never be replayed (replay has no read-only mode). The
-// manifest and the control product check this with the same function.
-export function assertBrowserRequestHost({ requests, targetOrigins, providerKind, engineEnabled, recordingMode = "" }) {
+// share the browser, and a recording of a "*" session could never be replayed (replay has no read-only mode). Blocked
+// hosts need the same interception, so only the nativeCdp provider takes them. The manifest and the control product
+// check this with the same function.
+export function assertBrowserRequestHost({ requests, targetOrigins, providerKind, engineEnabled, recordingMode = "",
+  blockedHosts = [] }) {
   assertBrowserRequestScope({ requests, targetOrigins });
+  if (blockedHosts.length && providerKind !== "nativeCdp") {
+    throw new TypeError("browser.blockedHosts needs the nativeCdp provider");
+  }
   if (requests !== "safe") return;
   if (providerKind !== "nativeCdp") throw new TypeError("browser requests safe needs the nativeCdp provider");
   if (engineEnabled) throw new TypeError("browser requests safe needs a browser-only host (engine disabled)");
@@ -141,20 +198,30 @@ export function requestGuardLaunchArgs(mode) {
   return mode === "safe" ? ["--disable-quic"] : [];
 }
 
-// First preferences of the fresh profile a session with this request mode starts with: a read-only session never
-// preloads pages (speculation rules prefetch and prerender run outside request interception).
-export function requestGuardProfilePreferences(mode) {
-  return mode === "safe" ? { net: { network_prediction_options: 2 } } : null;
+// First preferences of the fresh profile a session with this request mode (and these blocked hosts) starts with: a
+// read-only session, or one that blocks hosts, never preloads pages (speculation rules prefetch and prerender run
+// outside request interception, so a preload could reach a blocked host).
+export function requestGuardProfilePreferences(mode, { blockedHosts = [] } = {}) {
+  return mode === "safe" || blockedHosts.length ? { net: { network_prediction_options: 2 } } : null;
 }
 
 export class RequestGuard {
-  static async install(connection) {
-    const guard = new RequestGuard(connection);
+  // `requests` "safe" installs the whole read-only guard; "any" installs only the refusal of `blockedHosts` (which
+  // must then name at least one host). Either way the guard is in place before the first target opens.
+  static async install(connection, { requests = "safe", blockedHosts = [] } = {}) {
+    if (!BROWSER_REQUEST_MODES.includes(requests)) throw new TypeError(`browser requests must be any or safe: ${requests}`);
+    const hosts = normalizeBlockedHosts(blockedHosts);
+    if (requests !== "safe" && !hosts.length) throw new TypeError("a request guard for requests any needs blocked hosts");
+    const guard = new RequestGuard(connection, { requests, blockedHosts: hosts });
     guard._unsubscribe = connection.subscribe((event) => guard._onEvent(event));
     try {
-      await connection.send("Browser.setDownloadBehavior", { behavior: "deny", eventsEnabled: true });
-      await connection.send("Fetch.enable", { patterns: FETCH_PATTERNS });
-      await connection.send("Target.setAutoAttach", AUTO_ATTACH);
+      if (requests === "safe") {
+        await connection.send("Browser.setDownloadBehavior", { behavior: "deny", eventsEnabled: true });
+        await connection.send("Fetch.enable", { patterns: FETCH_PATTERNS });
+        await connection.send("Target.setAutoAttach", AUTO_ATTACH);
+      } else {
+        await connection.send("Fetch.enable", { patterns: hostPatterns(hosts) });
+      }
     } catch (error) {
       guard.close();
       throw error;
@@ -162,8 +229,15 @@ export class RequestGuard {
     return guard;
   }
 
-  constructor(connection) {
+  constructor(connection, { requests = "safe", blockedHosts = [] } = {}) {
     this._connection = connection;
+    this.mode = requests;
+    this.blockedHosts = Object.freeze([...blockedHosts]);
+    this._blockedHostSet = new Set(blockedHosts);
+    // Navigations refused for their host, and where the last one went (origin and path, never the query), so the
+    // broker can tell a start page sent to a blocked host from any other failed navigation.
+    this.hostNavigations = 0;
+    this.lastHostNavigation = null;
     this._blocked = [];
     this._dropped = 0;
     this._blockedTotal = 0;
@@ -185,6 +259,9 @@ export class RequestGuard {
   }
 
   _onEvent(event) {
+    // A guard that only blocks hosts decides requests and nothing else: the targets, downloads, and sockets of its
+    // session are none of its business.
+    if (this.mode !== "safe" && event.method !== "Fetch.requestPaused") return;
     if (event.method === "Target.attachedToTarget") {
       const { sessionId, targetInfo, waitingForDebugger } = event.params || {};
       const parent = this._targetSessions.get(event.sessionId);
@@ -314,7 +391,21 @@ export class RequestGuard {
     const method = String(params.request?.method || "GET").toUpperCase();
     const url = String(params.request?.url || "");
     try {
-      if (SAFE_METHODS.has(method)) {
+      const blockedHost = blockedHostOf(url, this._blockedHostSet);
+      if (blockedHost) {
+        // Refused whatever its method. A navigation fails rather than answering 204: the tab then names where it was
+        // sent (the browser's error page at that address) at once, instead of seeming to wait on its old page.
+        this._remember(method, url, params.resourceType, blockedHost);
+        if (params.resourceType === "Document") {
+          this.hostNavigations += 1;
+          const parsed = new URL(url);
+          this.lastHostNavigation = Object.freeze({ origin: parsed.origin, path: parsed.pathname, blockedHost });
+        }
+        await this._connection.send("Fetch.failRequest", { requestId: params.requestId, errorReason: "BlockedByClient" },
+          sessionId);
+        return;
+      }
+      if (this.mode !== "safe" || SAFE_METHODS.has(method)) {
         await this._connection.send("Fetch.continueRequest", { requestId: params.requestId }, sessionId);
         return;
       }
@@ -420,10 +511,12 @@ export class RequestGuard {
     this._remember("GET", url, "WebSocket");
   }
 
-  _remember(method, url, resourceType) {
+  // `blockedHost` names the host a request was refused for; a refusal without it was refused for its method or kind.
+  _remember(method, url, resourceType, blockedHost = "") {
     const where = reportedUrl(url);
     this._blockedTotal += 1;
-    this._blocked.push(Object.freeze({ method, url: where, resourceType: String(resourceType || ""), at: Date.now() }));
+    this._blocked.push(Object.freeze({ method, url: where, resourceType: String(resourceType || ""), at: Date.now(),
+      ...(blockedHost ? { blockedHost } : {}) }));
     if (this._blocked.length > BLOCKED_KEEP) {
       this._blocked.shift();
       this._dropped += 1;
@@ -446,12 +539,18 @@ export class RequestGuard {
         parentId: target.parentId })));
   }
 
+  // The blocked host a URL asks for, or "".
+  blockedHostOf(url) { return blockedHostOf(url, this._blockedHostSet); }
+
+  // The guard's state; the target fields belong to a read-only guard only.
   inspect() {
-    return Object.freeze({ mode: "safe", guardedSessions: this._guarded.size, blockedTotal: this._blockedTotal,
+    const common = { mode: this.mode, blockedHosts: this.blockedHosts, blockedTotal: this._blockedTotal,
+      pausedRequests: this._paused.size, pausedSample: [...this._paused.values()].slice(0, 10),
+      failedDecisions: [...this._failedDecisions], recentDocuments: [...this._documents] };
+    if (this.mode !== "safe") return Object.freeze(common);
+    return Object.freeze({ ...common, guardedSessions: this._guarded.size,
       refusedTargets: this._refused.length, refusals: [...this._refused],
-      pendingTargets: [...this._pending.values()], pausedRequests: this._paused.size,
-      pausedSample: [...this._paused.values()].slice(0, 10), recentTargets: [...this._attached],
-      failedDecisions: [...this._failedDecisions], recentDocuments: [...this._documents] });
+      pendingTargets: [...this._pending.values()], recentTargets: [...this._attached] });
   }
 
   close() {

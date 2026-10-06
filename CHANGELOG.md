@@ -12,6 +12,22 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **Blocked hosts.** The manifest key `browser.blockedHosts` (at most 64 exact host names, `nativeCdp` only, with
+  either request mode) makes the browser refuse every request to those hosts before it is sent: a navigation, each
+  redirect hop, a subresource, a frame, a new tab, a worker, however the address spells the host. A refused navigation
+  fails as blocked by the client; the tab's error page is judged and reported by the address it could not load, and
+  `automation.target.open` names the blocked host and place. Each refusal is listed in `blockedRequests` with its
+  `blockedHost`. Such a profile starts with page preloading off. The user-browser provider refuses the key, and a
+  session with requests `any` does not refuse a WebSocket to a blocked host. Gate: `test:blocked-hosts`.
+
+### 한국어
+
+`browser.blockedHosts`에 적은 호스트로 가는 요청은 이동, 리디렉트 단계, 페이지 자원, 프레임, 새 탭, 워커를 가리지
+않고 브라우저가 보내기 전에 거절한다. 거절한 이동의 오류 페이지는 불러오지 못한 주소로 판정하고 알린다. 사용자
+브라우저 연결은 이 키를 받지 않는다.
+
 ## 0.0.35 - 2026-10-01
 
 ### Added

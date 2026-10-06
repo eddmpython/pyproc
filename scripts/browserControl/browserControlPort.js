@@ -792,10 +792,12 @@ export class BrowserControlPort {
       } else if (frame && typeof frame.url === "string" && session.lastTarget) {
         session.mainDocumentEpoch += 1;
         // The main frame committed this URL: the surface is judged by it at once, so a page that moved on inside the
-        // permission (an interstitial that starts a download, say) keeps its events flowing.
-        session.lastTarget = Object.freeze({ ...session.lastTarget, url: frame.url });
+        // permission (an interstitial that starts a download, say) keeps its events flowing. The browser's error page
+        // for an address it could not load (a navigation refused for its host, say) is judged by that address.
+        const url = frame.unreachableUrl || frame.url;
+        session.lastTarget = Object.freeze({ ...session.lastTarget, url });
         const allowed = this.policy.allowsTarget(session.lastTarget);
-        session.held = allowed ? null : heldPlace(frame.url);
+        session.held = allowed ? null : heldPlace(url);
         session.authorizationState = allowed ? "verified" : "held";
         session.authorizedTarget = allowed ? session.lastTarget : null;
       } else {

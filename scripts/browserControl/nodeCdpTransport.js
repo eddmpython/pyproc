@@ -61,12 +61,14 @@ export class NodeCdpTransport {
   async describe(session) {
     // Chromium은 attach된 target을 browser-level Target.getTargets에서 URL/제목 빈 문자열로
     // 강등할 수 있다. 권한 재검사는 session 자체의 frame URL을 읽어야 우회 없이 성립한다.
+    // 불러오지 못한 주소의 오류 페이지(차단 호스트로 거절된 이동 등)는 그 주소로 판정하고 알린다.
     const deadline = Date.now() + 10000;
     let frameTreeResult;
     let url = "";
     while (Date.now() < deadline) {
       frameTreeResult = await this._connection.send("Page.getFrameTree", {}, session.id);
-      url = frameTreeResult.frameTree?.frame?.url || "";
+      const frame = frameTreeResult.frameTree?.frame;
+      url = frame?.unreachableUrl || frame?.url || "";
       if (url) break;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }

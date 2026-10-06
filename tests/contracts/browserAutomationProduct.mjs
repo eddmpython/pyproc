@@ -10,6 +10,7 @@ import {
 import { BrowserScreenshot } from "../../scripts/browserControl/browserScreenshot.js";
 import { validateBrowserAutomationAction } from "../../scripts/browserControl/browserAutomationCatalog.js";
 import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
+import { BLOCKED_HOSTS_MAX } from "../../scripts/browserControl/requestGuard.mjs";
 import { createControlProduct } from "../../scripts/controlProtocol/controlProduct.mjs";
 import { trustedCertificateLaunchArgs } from "../../scripts/browserControl/trustedCertificates.js";
 import { createSelfSignedCertificate } from "../support/selfSignedCertificate.mjs";
@@ -244,6 +245,35 @@ export async function assertBrowserAutomationProductContract() {
   ]) {
     const refused = await errorOf(() => validateMcpProductConfig(input));
     assert(pattern.test(refused?.message), `browser.requests manifest가 ${label}을 거절하지 않았다: ${refused?.message}`);
+  }
+  // 차단 호스트: 두 요청 모드 모두에서 nativeCdp에만 되고, 브라우저가 쓰는 한 형태로 정리되어 환경과 broker 설정까지
+  // 투영된다. 이름이 아닌 값(주소, 포트, 패턴, 빈 label)과 64개 초과는 거절한다.
+  const blockingAny = validateMcpProductConfig(browserOnlyWith({ ...manifest.browser,
+    blockedHosts: [" Link.Coupang.com. ", "coupa.ng", "link.coupang.com", "\uff43\uff4f\uff55\uff50\uff41\u3002ng"] }));
+  const blockingSafe = validateMcpProductConfig(browserOnlyWith({ ...safeBrowser, blockedHosts: ["한국.kr"] }));
+  assert(blockingAny.config.browser.blockedHosts.join() === "link.coupang.com,coupa.ng"
+    && blockingAny.env.PYPROC_BROWSER_BLOCKED_HOSTS === "link.coupang.com,coupa.ng"
+    && blockingAny.browserControl.blockedHosts.join() === "link.coupang.com,coupa.ng"
+    && validateMcpProductConfig(blockingAny.config).config.browser.blockedHosts.join() === "link.coupang.com,coupa.ng"
+    && blockingSafe.browserControl.blockedHosts.join() === "xn--3e0b707e.kr"
+    && validated.config.browser.blockedHosts === undefined && validated.env.PYPROC_BROWSER_BLOCKED_HOSTS === undefined
+    && validated.browserControl.blockedHosts.length === 0,
+  "browser.blockedHosts가 한 형태로 정리되어 환경과 broker 설정으로 투영되지 않았다");
+  for (const [label, input, pattern] of [
+    ["URL", browserOnlyWith({ ...manifest.browser, blockedHosts: ["https://link.coupang.com"] }), /one host name/],
+    ["경로", browserOnlyWith({ ...manifest.browser, blockedHosts: ["link.coupang.com/a"] }), /one host name/],
+    ["포트", browserOnlyWith({ ...manifest.browser, blockedHosts: ["link.coupang.com:443"] }), /one host name/],
+    ["패턴", browserOnlyWith({ ...manifest.browser, blockedHosts: ["*.coupang.com"] }), /one host name/],
+    ["백슬래시", browserOnlyWith({ ...manifest.browser, blockedHosts: ["a.test\\@b.test"] }), /one host name/],
+    ["빈 label", browserOnlyWith({ ...manifest.browser, blockedHosts: ["a..test"] }), /one host name/],
+    ["문자열 하나", browserOnlyWith({ ...manifest.browser, blockedHosts: "coupa.ng" }), /list of host names/],
+    ["상한 초과", browserOnlyWith({ ...manifest.browser,
+      blockedHosts: Array.from({ length: BLOCKED_HOSTS_MAX + 1 }, (_, i) => `h${i}.test`) }), /at most 64/],
+    ["frame provider", browserOnlyWith({ ...manifest.browser, provider: "frame", blockedHosts: ["coupa.ng"] }),
+      /blockedHosts needs the nativeCdp provider/],
+  ]) {
+    const refused = await errorOf(() => validateMcpProductConfig(input));
+    assert(pattern.test(refused?.message), `browser.blockedHosts manifest가 ${label}을 거절하지 않았다: ${refused?.message}`);
   }
   // 환경 경로도 같은 규칙을 쓴다: frame provider와 Python Machine은 읽기 전용 세션을 열지 않는다.
   for (const [label, env, pattern] of [

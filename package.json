@@ -127,6 +127,7 @@
     "test:browser-control": "node tests/browser/browserControl.mjs",
     "test:browser-control-stress": "node tests/browser/browserControlStress.mjs",
     "test:request-guard": "node tests/browser/requestGuardProduct.mjs",
+    "test:blocked-hosts": "node tests/browser/blockedHostProduct.mjs",
     "test:permission-revision": "node tests/browser/permissionRevisionProduct.mjs",
     "test:perception-reuse": "node tests/browser/perceptionReuseProduct.mjs",
     "test:download-receipt": "node tests/browser/downloadReceiptProduct.mjs",

@@ -241,7 +241,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   const browserConfig = browserEnabled ? parseBrowserControlConfig(env, { timeoutMs }) : null;
   if (browserConfig) {
     assertBrowserRequestHost({ requests: browserConfig.requests, targetOrigins: browserConfig.targetOrigins,
-      providerKind, engineEnabled, recordingMode: recordingConfig?.mode || "" });
+      providerKind, engineEnabled, recordingMode: recordingConfig?.mode || "", blockedHosts: browserConfig.blockedHosts });
     assertPermissionRevisionHost({ permissionRevision: browserConfig.permissionRevision, providerKind,
       recordingMode: recordingConfig?.mode || "" });
   }
@@ -314,14 +314,15 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   try {
     windowsNative = windowsNativeConfig ? await WindowsNativeHostClient.open(windowsNativeConfig) : null;
     // A user browser is already running; pyproc launches one only to host the Machine page.
+    const preferences = requestGuardProfilePreferences(browserConfig?.requests,
+      { blockedHosts: browserConfig?.blockedHosts || [] });
     browserSession = providerKind === "userBrowser" && !machinePage ? null : browserLauncher(
       machinePage?.launchUrl || "about:blank", {
       prefix: "pyprocControl-",
       cdpPipe: providerKind === "nativeCdp",
       extraArgs: [...trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
         ...requestGuardLaunchArgs(browserConfig?.requests)],
-      ...(requestGuardProfilePreferences(browserConfig?.requests)
-        ? { preferences: requestGuardProfilePreferences(browserConfig?.requests) } : {}),
+      ...(preferences ? { preferences } : {}),
     });
     if (providerKind === "userBrowser") userBrowserScratch = await mkdtemp(join(tmpdir(), "pyprocUserBrowser-"));
     automationSpace = browserEnabled

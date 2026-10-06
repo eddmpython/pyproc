@@ -159,6 +159,8 @@ export async function assertUserBrowserContract() {
     [{ executable: resolve("browser.exe") }, /does not accept browser.executable/],
     [{ headed: true }, /does not accept browser.headed/],
     [{ requests: "safe" }, /nativeCdp/],
+    // The extension cannot refuse a request before it is sent, so a host the session must never reach refuses it.
+    [{ blockedHosts: ["link.coupang.com"] }, /blockedHosts needs the nativeCdp provider/],
   ]) {
     const error = await errorOf(() => validateMcpProductConfig({ ...manifestBase,
       browser: { ...manifestBase.browser, ...change } }));

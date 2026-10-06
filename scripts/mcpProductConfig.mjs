@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { assertPermissionRevisionHost, parseBrowserControlConfig } from "./browserControl/mcpBrowserControl.js";
-import { assertBrowserRequestHost } from "./browserControl/requestGuard.mjs";
+import { assertBrowserRequestHost, normalizeBlockedHosts } from "./browserControl/requestGuard.mjs";
 import { normalizeBrowserViewport } from "./browserControl/browserViewport.js";
 import { browserDesktopOf } from "./browserControl/browserDesktop/browserDesktopHelper.mjs";
 import { normalizeTrustedCertificates, trustedCertificateEnvironment } from "./browserControl/trustedCertificates.js";
@@ -17,7 +17,8 @@ const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "desktop", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "exportRoot", "externalEffects", "purpose", "artifacts", "viewport",
-  "recording", "trustedCertificates", "requests", "userBrowser", "userBrowserProfile", "permissionRevision",
+  "recording", "trustedCertificates", "requests", "blockedHosts", "userBrowser", "userBrowserProfile",
+  "permissionRevision",
 ]);
 const RECORDING_KEYS = new Set([
   "mode", "file", "overwrite", "recordingId", "finalSha256", "startCursor", "prefixSha256",
@@ -40,8 +41,8 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_MACHINE_ENGINE", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER", "PYPROC_USER_BROWSER", "PYPROC_USER_BROWSER_PROFILE",
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_BROWSER_DESKTOP", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
-  "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_REQUESTS", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
-  "PYPROC_BROWSER_PERMISSION_REVISION",
+  "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_REQUESTS", "PYPROC_BROWSER_BLOCKED_HOSTS", "PYPROC_BROWSER_ACTIONS",
+  "PYPROC_BROWSER_METHODS", "PYPROC_BROWSER_PERMISSION_REVISION",
   "PYPROC_BROWSER_FILE_ROOTS", "PYPROC_BROWSER_EXPORT_ROOT", "PYPROC_BROWSER_EXTERNAL_EFFECTS", "PYPROC_BROWSER_PURPOSE",
   "PYPROC_BROWSER_ARTIFACT_MAX_BYTES", "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",
   "PYPROC_BROWSER_ARTIFACT_MAX_COUNT", "PYPROC_BROWSER_ARTIFACT_INLINE_BYTES",
@@ -249,6 +250,7 @@ function normalizedBrowser(input = { enabled: false }) {
   }
   const purpose = (browser.purpose || "").trim();
   const requests = browser.requests === undefined ? "any" : browser.requests;
+  const blockedHosts = browser.blockedHosts === undefined ? [] : normalizeBlockedHosts(browser.blockedHosts);
   const artifacts = normalizedArtifacts(browser.artifacts);
   const recording = normalizedRecording(browser.recording, provider, artifacts);
   // Live permission revision is for the product's own controller (a Control client), and only when the manifest says
@@ -288,6 +290,7 @@ function normalizedBrowser(input = { enabled: false }) {
     gpu: optionalBoolean(browser.gpu, "browser.gpu"),
     allowedOrigins,
     requests,
+    ...(blockedHosts.length ? { blockedHosts } : {}),
     permissionRevision,
     maxRisk: browser.maxRisk || "read",
     actions: stringArray(browser.actions, "browser.actions", { allowEmpty: false }),
@@ -549,6 +552,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   env.PYPROC_BROWSER_ALLOWED_ORIGINS = browser.allowedOrigins.join(",");
   env.PYPROC_BROWSER_MAX_RISK = browser.maxRisk;
   if (browser.requests === "safe") env.PYPROC_BROWSER_REQUESTS = "safe";
+  if (browser.blockedHosts) env.PYPROC_BROWSER_BLOCKED_HOSTS = browser.blockedHosts.join(",");
   if (browser.permissionRevision === "controller") env.PYPROC_BROWSER_PERMISSION_REVISION = "controller";
   env.PYPROC_BROWSER_ACTIONS = browser.actions.join(",");
   env.PYPROC_BROWSER_METHODS = browser.methods.join(",");
@@ -584,7 +588,7 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
   if (browser.enabled) {
     assertBrowserRequestHost({ requests: browser.requests, targetOrigins: browser.allowedOrigins,
       providerKind: browser.provider, engineEnabled: engine.enabled !== false,
-      recordingMode: browser.recording?.mode || "" });
+      recordingMode: browser.recording?.mode || "", blockedHosts: browser.blockedHosts || [] });
   }
   if (engine.enabled === false) {
     if (!browser.enabled) throw new TypeError("a disabled engine requires browser.enabled true");

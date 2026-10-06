@@ -91,7 +91,7 @@ export class NodeBrowserControlBroker {
   /** The policy a revision of this running broker would put in force (the same checks as at start, with the request
    * scope and download folder it started with); `port.revisePolicy` puts it in force. */
   permissionPolicy({ targetOrigins, methods, events = [], fileRoots = [], maxRisk }) {
-    assertBrowserRequestScope({ requests: this._guard ? "safe" : "any", targetOrigins });
+    assertBrowserRequestScope({ requests: this._guard?.mode === "safe" ? "safe" : "any", targetOrigins });
     return new BrowserControlPolicy({ targetOrigins, methods, events, fileRoots,
       downloadRoot: this.port.policy.downloadRoot, maxRisk });
   }
@@ -113,6 +113,12 @@ export class NodeBrowserControlBroker {
         "browser target URL must use HTTP(S) without embedded credentials");
     }
     const normalized = parsed.href;
+    const blockedHost = this._guard?.blockedHostOf(normalized) || "";
+    if (blockedHost) {
+      throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+        `browser target host is blocked: ${blockedHost}`, { details: Object.freeze({ ...heldPlace(normalized),
+          blockedHost }) });
+    }
     try { this.port.policy.authorizeTarget({ id: "candidate", type: "page", url: normalized, title: "" }); }
     catch (error) {
       throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
@@ -150,7 +156,16 @@ export class NodeBrowserControlBroker {
         throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
           "the browser permission changed while the target opened", { outcome: "notSent" });
       }
+      const hostNavigations = this._guard?.hostNavigations || 0;
       const navigation = await this._connection.send("Page.navigate", { url: normalized }, sessionId);
+      // The start page sent the tab to a blocked host (a redirect), which the guard refused before it was asked: the
+      // caller learns which host and where, never the query, and the tab is closed with the rest of this attempt.
+      if (navigation.errorText === "net::ERR_BLOCKED_BY_CLIENT" && this._guard
+        && this._guard.hostNavigations > hostNavigations && this._guard.lastHostNavigation) {
+        throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+          `browser navigation went to a blocked host: ${this._guard.lastHostNavigation.blockedHost}`,
+          { outcome: "applied", details: this._guard.lastHostNavigation });
+      }
       // 인증서 실패는 원인을 지목한다: 호출자가 자기 코드를 의심하지 않고 browser.trustedCertificates를 본다.
       if (/^net::ERR_CERT_/.test(navigation.errorText || "")) {
         throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.targetCertificateUntrusted,
@@ -268,10 +283,11 @@ export class NodeBrowserControlBroker {
       connection: this._connection.inspect?.() || null, ...this.port.inspect() });
   }
 
-  // Requests the read-only guard refused since the last call ({requests, dropped}); null when any request may be sent.
+  // Requests the guard (read-only, or blocking hosts) refused since the last call ({requests, dropped}); null when any
+  // request may be sent.
   blockedRequests() { return this._guard ? this._guard.drainBlocked() : null; }
 
-  // Lets a navigation or submission an action set off be decided before its result is drained (read-only only).
+  // Lets a navigation or submission an action set off be decided before its result is drained (guarded sessions only).
   settle() { return this._guard ? this._guard.settle() : Promise.resolve(); }
 
   close() {
@@ -291,6 +307,7 @@ export async function connectNodeBrowserControl({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   viewport = null,
   requests = "any",
+  blockedHosts = [],
   holdOutside = false,
 } = {}) {
   assertBrowserRequestScope({ requests, targetOrigins });
@@ -300,8 +317,11 @@ export async function connectNodeBrowserControl({
   try {
     const compatibility = assertBrowserCompatibility(await connection.send("Browser.getVersion"));
     // Installed before the first target is opened, so no request of the session ever runs unguarded.
-    guard = requests === "safe" ? await RequestGuard.install(connection) : null;
-    const port = new BrowserControlPort({ transport: new NodeCdpTransport(connection, { guard }), policy });
+    guard = requests === "safe" || blockedHosts.length
+      ? await RequestGuard.install(connection, { requests, blockedHosts }) : null;
+    // Only the read-only guard attaches every frame; a session that only blocks hosts keeps the transport's own.
+    const port = new BrowserControlPort({ transport: new NodeCdpTransport(connection,
+      { guard: guard?.mode === "safe" ? guard : null }), policy });
     return new NodeBrowserControlBroker({ connection, port, compatibility, timeoutMs, viewport, guard, holdOutside });
   } catch (error) {
     guard?.close();

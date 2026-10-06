@@ -22,6 +22,7 @@ import { headlessArgs } from "../../scripts/browserControl/browserLauncher.mjs";
 import { parseBrowserControlConfig, reviseBrowserControlConfig } from "../../scripts/browserControl/mcpBrowserControl.js";
 import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
 import { RecordingSpace } from "../../scripts/automationSpace/recordingSpace.js";
+import { RequestGuard } from "../../scripts/browserControl/requestGuard.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -833,5 +834,51 @@ export async function assertBrowserControlContract() {
   assert(!fromAny.widened && refusal({ allowedOrigins: ["*"] }, fromAny.config, anyStart)
     && reviseBrowserControlConfig(anyStart, fromAny.config, { allowedOrigins: ["*"], reference: "r" }).widened,
   "* 에서 정확한 origin으로 좁히기는 참조 없이, * 로 되돌리기는 참조와 함께만 되어야 한다");
+  const blockingStart = parseBrowserControlConfig({ PYPROC_BROWSER_ALLOWED_ORIGINS: "http://a.test",
+    PYPROC_BROWSER_ACTIONS: "snapshot,click", PYPROC_BROWSER_MAX_RISK: "externalEffect",
+    PYPROC_BROWSER_EXTERNAL_EFFECTS: "acknowledged", PYPROC_BROWSER_PURPOSE: "blocked host contract",
+    PYPROC_BROWSER_BLOCKED_HOSTS: "Link.Coupang.com" });
+  assert(reviseBrowserControlConfig(blockingStart, blockingStart, { allowedOrigins: both, reference: "r" })
+    .config.blockedHosts.join() === "link.coupang.com", "권한 개정이 차단 호스트를 바꾸거나 지웠다");
+
+  // A guard that only blocks hosts (requests any) intercepts only addresses that could name one, refuses an exact match
+  // whatever its method before it is sent, lets a look-alike through, and leaves the session's targets alone.
+  const guardSent = [];
+  const guardListeners = new Set();
+  const guardConnection = {
+    subscribe(listener) { guardListeners.add(listener); return () => guardListeners.delete(listener); },
+    async send(method, params, sessionId) { guardSent.push({ method, params, sessionId }); return {}; },
+  };
+  assert((await errorOf(() => RequestGuard.install(guardConnection, { requests: "any" })))?.message
+    .includes("needs blocked hosts"), "차단할 호스트 없는 any 가드가 설치되었다");
+  const hostGuard = await RequestGuard.install(guardConnection,
+    { requests: "any", blockedHosts: ["link.coupang.com", "coupa.ng"] });
+  assert(guardSent.map((item) => item.method).join() === "Fetch.enable"
+    && JSON.stringify(guardSent[0].params.patterns) === JSON.stringify([
+      { urlPattern: "*link.coupang.com*", requestStage: "Request" },
+      { urlPattern: "*coupa.ng*", requestStage: "Request" }]),
+  `호스트 차단 가드가 그 호스트를 담을 수 있는 주소만 가로채지 않는다: ${JSON.stringify(guardSent)}`);
+  guardSent.length = 0;
+  const pause = (requestId, url, method = "GET", resourceType = "Document") => {
+    for (const listener of guardListeners) listener({ method: "Fetch.requestPaused",
+      params: { requestId, request: { url, method }, resourceType } });
+  };
+  pause("r1", "https://link.coupang.com/a/xyz?subId=secret");
+  pause("r2", "https://link.coupang.com./a/xyz", "POST", "Fetch");
+  pause("r3", "https://www.example.test/?next=link.coupang.com");
+  pause("r4", "https://link.coupang.com.evil.test/a");
+  for (const listener of guardListeners) listener({ method: "Target.attachedToTarget",
+    params: { sessionId: "s1", targetInfo: { targetId: "t1", type: "page", url: "about:blank" }, waitingForDebugger: true } });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const decisions = Object.fromEntries(guardSent.map((item) => [item.params.requestId, item.method]));
+  const drained = hostGuard.drainBlocked().requests;
+  assert(decisions.r1 === "Fetch.failRequest" && decisions.r2 === "Fetch.failRequest"
+    && decisions.r3 === "Fetch.continueRequest" && decisions.r4 === "Fetch.continueRequest"
+    && guardSent.every((item) => item.params.requestId)
+    && drained.length === 2 && drained.every((item) => item.blockedHost === "link.coupang.com" && !item.url.includes("?"))
+    && hostGuard.hostNavigations === 1 && hostGuard.lastHostNavigation?.path === "/a/xyz"
+    && hostGuard.inspect().mode === "any" && hostGuard.inspect().guardedSessions === undefined,
+  `호스트 차단 가드의 판정이 틀렸다: ${JSON.stringify({ decisions, drained, sent: guardSent.map((item) => item.method) })}`);
+  hostGuard.close();
   return true;
 }
