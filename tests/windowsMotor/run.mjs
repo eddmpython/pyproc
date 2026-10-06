@@ -69,6 +69,10 @@ $form.Add_Shown({
 [System.Windows.Forms.Application]::Run($form)
 `;
 
+const chromiumFixturePage = `<!doctype html><html><head><title>PyProc Motor Chromium Fixture</title></head><body>
+<button onclick="document.getElementById('status').textContent = 'saved'">Save</button>
+<p id="status">idle</p></body></html>`;
+
 async function launchFixture(path) {
   const child = spawn(path, ["-NoLogo", "-NoProfile", "-STA", "-Command", fixtureScript], {
     stdio: ["ignore", "pipe", "pipe"], windowsHide: false,
@@ -103,10 +107,13 @@ const engineRoot = join(ROOT, "src", "runtime", "engines", "wasi", "owned", "cor
 const memoryRoot = join(installed.appDir, "Motor 실행 기억 한글");
 const webServer = createServer((request, response) => {
   response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  response.end("<!doctype html><html><body><button>Save</button></body></html>");
+  response.end(request.url === "/chromium" ? chromiumFixturePage
+    : "<!doctype html><html><body><button>Save</button></body></html>");
 });
 await new Promise((resolveListen) => webServer.listen(0, "127.0.0.1", resolveListen));
 const origin = `http://127.0.0.1:${webServer.address().port}`;
+const launcher = await import(pathToFileURL(join(packageRoot, "scripts", "browserControl", "browserLauncher.mjs")).href);
+const chromiumPath = launcher.findBrowser();
 await writeFile(configPath, `${JSON.stringify({ schemaVersion: 1, engine: { root: engineRoot },
   browser: { enabled: true, provider: "nativeCdp", allowedOrigins: [origin],
     maxRisk: "externalEffect", actions: ["snapshot", "click"], methods: [],
@@ -116,10 +123,14 @@ await writeFile(configPath, `${JSON.stringify({ schemaVersion: 1, engine: { root
   actuation: { enabled: true, native: { enabled: true, installRoot, applications: [{
     applicationId: "application:motorFixture", executablePath: fixturePath,
     windowTitle: "PyProc Motor Fixture",
+  }, {
+    applicationId: "application:chromiumFixture", executablePath: chromiumPath,
+    windowTitle: "PyProc Motor Chromium Fixture",
   }] } }, timeoutMs: 180000 }, null, 2)}\n`);
 
 const controlCli = binPath(installed.appDir, "pyproc-control");
 let fixture = null;
+let chromium = null;
 let client = null;
 let controlClient = null;
 let mcpChild = null;
@@ -133,6 +144,16 @@ try {
     assert.equal(setup.installation.signatureValid, true);
     assert.equal((await stat(setup.installation.hostPath)).isFile(), true);
     assert.match(setup.installation.sbomSha256, /^[0-9a-f]{64}$/);
+  });
+
+  // The host's own tests exercise what the gate's fixtures cannot reach without the foreground: repeated runtime ids
+  // fold to one candidate, and a contact point owned by another window (or another part of its own) is refused. The
+  // contact test only asks which window and element own a point; it sends no input.
+  const hostTests = run("cargo", ["test", "--release", "--locked", "--manifest-path",
+    join(packageRoot, "scripts", "actuation", "native", "windowsHost", "Cargo.toml"),
+    "--target-dir", join(installed.tmp, "host tests")], { cwd: installed.appDir });
+  await check("host tests fold repeated UI Automation answers and refuse a foreign contact point", () => {
+    assert.match(hostTests.stdout, /test result: ok\. 4 passed; 0 failed/);
   });
 
   const hostModule = await import(pathToFileURL(join(packageRoot, "scripts", "actuation", "windowsNativeHost.js")).href);
@@ -150,6 +171,34 @@ try {
     assert.equal(nativeResult.providerCalls, 1);
     assert.equal(/processId|windowHandle|runtimeId|coordinate|"x"|"y"/.test(JSON.stringify(binding)), false);
   });
+
+  // A Chromium window's web content binds through the same query: name, control type and runtime id identity (a
+  // Chromium window has answered one query with the same element up to 121 times). No physical input is sent here.
+  const chromiumProfile = join(installed.tmp, "Chromium fixture profile");
+  chromium = { process: spawn(chromiumPath, [...launcher.browserLaunchArgs(chromiumProfile, { headed: true }),
+    "--force-renderer-accessibility", "--window-position=560,120", "--window-size=520,360",
+    `--app=${origin}/chromium`], { stdio: "ignore" }), profile: chromiumProfile };
+  const chromiumTarget = { applicationId: "application:chromiumFixture", surfaceEpoch: "surface:chromium1",
+    target: { name: "Save", controlType: "button" } };
+  let chromiumBinding = null;
+  for (let attempt = 0; attempt < 50 && !chromiumBinding; attempt += 1) {
+    try { chromiumBinding = await client.bindApplication(chromiumTarget); }
+    catch (error) {
+      const nativeCode = error?.details?.nativeCode;
+      if (nativeCode !== "NATIVE_WINDOW_STALE" && nativeCode !== "NATIVE_TARGET_STALE") throw error;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 200));
+    }
+  }
+  const chromiumResult = await client.executeAccessibility({ bindingRef: chromiumBinding.bindingRef,
+    planSha256: "e".repeat(64), intentSha256: "f".repeat(64), intent: "activate", desired: {},
+    surfaceEpoch: "surface:chromium1", postcondition: { name: "saved", controlType: "text" } });
+  await check("a Chromium window's repeated UI Automation answers bind one exact target", () => {
+    assert.equal(chromiumBinding.uniqueness, "unique");
+    assert.equal(chromiumBinding.candidateCount, 1);
+    assert.equal(chromiumResult.terminal, "confirmed");
+  });
+  launcher.killBrowserProcess(chromium.process, chromium.profile);
+  chromium = null;
 
   await stop(fixture.child);
   fixture = await launchFixture(fixturePath);
@@ -318,6 +367,7 @@ try {
   await controlClient?.close();
   await client?.close();
   await stop(fixture?.child);
+  if (chromium) launcher.killBrowserProcess(chromium.process, chromium.profile);
   await new Promise((resolveClose) => webServer.close(resolveClose));
   await rm(installed.tmp, { recursive: true, force: true });
 }

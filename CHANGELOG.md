@@ -22,11 +22,26 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   `blockedHost`. Such a profile starts with page preloading off. The user-browser provider refuses the key, and a
   session with requests `any` does not refuse a WebSocket to a blocked host. Gate: `test:blocked-hosts`.
 
+### Fixed
+
+- **Windows Motor contact point.** Physical `osInput` checks, right before the click, that the bound window still has
+  the foreground, owns the point under the target's center, and that the element at that point is the target or inside
+  it. A target outside its window, or covered by another window or by another part of its own window, refuses as
+  `NATIVE_TARGET_OCCLUDED` (`notSent`) instead of clicking whatever owns that point. The host runs per-monitor DPI
+  aware, so UI Automation rectangles, the check and `SendInput` share physical pixels.
+- **Windows Motor bindings in Chromium windows.** Binding candidates come from one cached UI Automation query by name,
+  control type and automation id and are counted by runtime id, so an element a Chromium window reports many times
+  binds as one exact target instead of `NATIVE_TARGET_AMBIGUOUS`. Gate: `test:windows-motor` runs the host's own tests.
+
 ### 한국어
 
 `browser.blockedHosts`에 적은 호스트로 가는 요청은 이동, 리디렉트 단계, 페이지 자원, 프레임, 새 탭, 워커를 가리지
 않고 브라우저가 보내기 전에 거절한다. 거절한 이동의 오류 페이지는 불러오지 못한 주소로 판정하고 알린다. 사용자
 브라우저 연결은 이 키를 받지 않는다.
+
+Windows Motor의 물리 클릭은 누르기 직전에 대상 중심의 점이 묶은 창의 것이고 그 점의 요소가 대상인지 확인한다. 창
+밖이나 다른 창, 같은 창의 다른 부분에 가린 대상은 보내지 않고 거절한다. Chromium 창이 같은 요소를 여러 번 돌려줘도
+runtime id로 하나로 센다.
 
 ## 0.0.35 - 2026-10-01
 

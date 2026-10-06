@@ -10,30 +10,43 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use windows::core::{BOOL, BSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
 };
+use windows::Win32::System::Ole::{SafeArrayGetElement, SafeArrayGetLBound, SafeArrayGetUBound};
 use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW,
     PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
+use windows::Win32::System::Variant::{VARENUM, VARIANT, VT_ARRAY, VT_I4};
 use windows::Win32::UI::Accessibility::*;
+use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN,
     MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, MOUSEINPUT, SendInput,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, EnumWindows, GetForegroundWindow, GetMessageW, GetSystemMetrics,
-    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, KBDLLHOOKSTRUCT,
+    CallNextHookEx, DispatchMessageW, EnumWindows, GA_ROOT, GetAncestor, GetForegroundWindow, GetMessageW,
+    GetSystemMetrics, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, KBDLLHOOKSTRUCT,
     IsWindowVisible, LLKHF_INJECTED, LLMHF_INJECTED, MSG, MSLLHOOKSTRUCT, SM_CXVIRTUALSCREEN,
     SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SetWindowsHookExW,
-    TranslateMessage, WH_KEYBOARD_LL, WH_MOUSE_LL,
+    TranslateMessage, WH_KEYBOARD_LL, WH_MOUSE_LL, WindowFromPoint,
 };
 
 const PROTOCOL: &str = "pyproc.windowsMotorHost";
 const VERSION: u32 = 1;
 const MAX_FRAME: usize = 1024 * 1024;
 const MAX_CANDIDATES: i32 = 4096;
+// Ancestors walked from the element under the click point to the bound target; deeper nesting refuses the click.
+const MAX_HIT_DEPTH: usize = 64;
 const INJECTED_MARKER: usize = 0x5059_5052_4f43;
+// UI Automation control types a binding may name, by the role names the Motor sends.
+const CONTROL_TYPES: [(&str, UIA_CONTROLTYPE_ID); 9] = [
+    ("button", UIA_ButtonControlTypeId), ("checkbox", UIA_CheckBoxControlTypeId),
+    ("radio", UIA_RadioButtonControlTypeId), ("textbox", UIA_EditControlTypeId),
+    ("combobox", UIA_ComboBoxControlTypeId), ("listitem", UIA_ListItemControlTypeId),
+    ("treeitem", UIA_TreeItemControlTypeId), ("text", UIA_TextControlTypeId),
+    ("slider", UIA_SliderControlTypeId),
+];
 static USER_INPUT_EPOCH: AtomicU64 = AtomicU64::new(0);
 static HOOKS_READY: AtomicBool = AtomicBool::new(false);
 
@@ -306,49 +319,66 @@ fn application_window(policy: &ApplicationPolicy) -> Result<(HWND, u32), Failure
     Ok(matches[0])
 }
 
-fn control_type_name(id: UIA_CONTROLTYPE_ID) -> &'static str {
-    if id == UIA_ButtonControlTypeId { "button" }
-    else if id == UIA_CheckBoxControlTypeId { "checkbox" }
-    else if id == UIA_RadioButtonControlTypeId { "radio" }
-    else if id == UIA_EditControlTypeId { "textbox" }
-    else if id == UIA_ComboBoxControlTypeId { "combobox" }
-    else if id == UIA_ListItemControlTypeId { "listitem" }
-    else if id == UIA_TreeItemControlTypeId { "treeitem" }
-    else if id == UIA_TextControlTypeId { "text" }
-    else if id == UIA_SliderControlTypeId { "slider" }
-    else { "unknown" }
+fn uia_failure(error: windows::core::Error) -> Failure {
+    Failure::not_sent("NATIVE_UIA_UNAVAILABLE", error.to_string())
 }
 
-fn string_of(value: BSTR) -> String {
-    value.to_string()
-}
-
-fn matches_target(element: &IUIAutomationElement, target: &TargetInvariant) -> bool {
+// The runtime id is the identity UI Automation gives an element. Chromium answers one descendant query with the same
+// element many times (121 copies of one element were measured), so candidates are counted by it.
+fn runtime_id(element: &IUIAutomationElement) -> Option<Vec<i32>> {
+    let value: VARIANT = unsafe { element.GetCachedPropertyValue(UIA_RuntimeIdPropertyId) }.ok()?;
     unsafe {
-        let name = element.CurrentName().map(string_of).unwrap_or_default();
-        let control_type = element.CurrentControlType().map(control_type_name).unwrap_or("unknown");
-        let automation_id = element.CurrentAutomationId().map(string_of).unwrap_or_default();
-        name == target.name && control_type == target.control_type
-            && target.automation_id.as_ref().is_none_or(|expected| expected == &automation_id)
-            && element.CurrentIsEnabled().is_ok_and(|enabled| enabled.as_bool())
+        let inner = &value.Anonymous.Anonymous;
+        if inner.vt != VARENUM(VT_ARRAY.0 | VT_I4.0) || inner.Anonymous.parray.is_null() { return None; }
+        let array = inner.Anonymous.parray;
+        let lower = SafeArrayGetLBound(array, 1).ok()?;
+        let upper = SafeArrayGetUBound(array, 1).ok()?;
+        let mut parts = Vec::new();
+        for index in lower..=upper {
+            let mut part = 0i32;
+            SafeArrayGetElement(array, &index, &mut part as *mut i32 as *mut core::ffi::c_void).ok()?;
+            parts.push(part);
+        }
+        (!parts.is_empty()).then_some(parts)
     }
 }
 
-fn elements(root: &IUIAutomationElement, automation: &IUIAutomation) -> Result<Vec<IUIAutomationElement>, Failure> {
-    let condition = unsafe { automation.CreateTrueCondition() }
-        .map_err(|error| Failure::not_sent("NATIVE_UIA_UNAVAILABLE", error.to_string()))?;
-    let array = unsafe { root.FindAll(TreeScope_Descendants, &condition) }
-        .map_err(|error| Failure::not_sent("NATIVE_UIA_UNAVAILABLE", error.to_string()))?;
-    let length = unsafe { array.Length() }
-        .map_err(|error| Failure::not_sent("NATIVE_UIA_UNAVAILABLE", error.to_string()))?;
+// Keeps the first item of each identity. An item without one is never merged, so a missing id can only leave a
+// target ambiguous, never make an ambiguous target look unique.
+fn unique_by_identity<T>(items: impl IntoIterator<Item = (Option<Vec<i32>>, T)>) -> Vec<T> {
+    let mut seen = HashSet::new();
+    items.into_iter().filter_map(|(identity, item)| identity.is_none_or(|key| seen.insert(key)).then_some(item))
+        .collect()
+}
+
+// The enabled elements under `root` with exactly the target's name, control type and (when named) automation id.
+// The provider evaluates the condition and returns the cached identity in one query per call.
+fn candidates(root: &IUIAutomationElement, automation: &IUIAutomation, target: &TargetInvariant)
+    -> Result<Vec<IUIAutomationElement>, Failure> {
+    let Some(&(_, control_type)) = CONTROL_TYPES.iter().find(|(role, _)| *role == target.control_type)
+        else { return Ok(Vec::new()); };
+    let property = |id: UIA_PROPERTY_ID, value: VARIANT| unsafe { automation.CreatePropertyCondition(id, &value) }
+        .map_err(uia_failure);
+    let typed = property(UIA_ControlTypePropertyId, VARIANT::from(control_type.0))?;
+    let named = property(UIA_NamePropertyId, VARIANT::from(target.name.as_str()))?;
+    let mut condition = unsafe { automation.CreateAndCondition(&typed, &named) }.map_err(uia_failure)?;
+    if let Some(automation_id) = &target.automation_id {
+        let identified = property(UIA_AutomationIdPropertyId, VARIANT::from(automation_id.as_str()))?;
+        condition = unsafe { automation.CreateAndCondition(&condition, &identified) }.map_err(uia_failure)?;
+    }
+    let request = unsafe { automation.CreateCacheRequest() }.map_err(uia_failure)?;
+    for id in [UIA_RuntimeIdPropertyId, UIA_IsEnabledPropertyId] {
+        unsafe { request.AddProperty(id) }.map_err(uia_failure)?;
+    }
+    let array = unsafe { root.FindAllBuildCache(TreeScope_Descendants, &condition, &request) }.map_err(uia_failure)?;
+    let length = unsafe { array.Length() }.map_err(uia_failure)?;
     if length > MAX_CANDIDATES {
         return Err(Failure::not_sent("NATIVE_TARGET_INCOMPLETE", "UI Automation candidate budget was exceeded"));
     }
-    let mut result = Vec::with_capacity(length as usize);
-    for index in 0..length {
-        if let Ok(element) = unsafe { array.GetElement(index) } { result.push(element); }
-    }
-    Ok(result)
+    let enabled = (0..length).filter_map(|index| unsafe { array.GetElement(index) }.ok())
+        .filter(|element| unsafe { element.CachedIsEnabled() }.is_ok_and(|value| value.as_bool()))
+        .map(|element| (runtime_id(&element), element));
+    Ok(unique_by_identity(enabled))
 }
 
 fn exact_element(automation: &IUIAutomation, binding: &Binding, require_foreground: bool)
@@ -359,10 +389,8 @@ fn exact_element(automation: &IUIAutomation, binding: &Binding, require_foregrou
     if !same_windows_path(&executable_path, &binding.executable_path) {
         return Err(Failure::not_sent("NATIVE_PROCESS_MISMATCH", "process executable differs from the allowed application fence"));
     }
-    let root = unsafe { automation.ElementFromHandle(hwnd) }
-        .map_err(|error| Failure::not_sent("NATIVE_UIA_UNAVAILABLE", error.to_string()))?;
-    let matches: Vec<_> = elements(&root, automation)?.into_iter()
-        .filter(|element| matches_target(element, &binding.target)).collect();
+    let root = unsafe { automation.ElementFromHandle(hwnd) }.map_err(uia_failure)?;
+    let matches = candidates(&root, automation, &binding.target)?;
     if matches.len() != 1 {
         return Err(Failure::not_sent(if matches.len() > 1 { "NATIVE_TARGET_AMBIGUOUS" } else { "NATIVE_TARGET_STALE" },
             format!("exact UI Automation binding requires one candidate, found {}", matches.len())));
@@ -377,7 +405,7 @@ fn semantic_exists(automation: &IUIAutomation, binding: &Binding, expected: &Sem
     let Ok(hwnd) = hwnd else { return false; };
     let Ok(root) = (unsafe { automation.ElementFromHandle(hwnd) }) else { return false; };
     let target = TargetInvariant { name: expected.name.clone(), control_type: expected.control_type.clone(), automation_id: None };
-    elements(&root, automation).is_ok_and(|items| items.iter().any(|element| matches_target(element, &target)))
+    candidates(&root, automation, &target).is_ok_and(|items| !items.is_empty())
 }
 
 fn wait_postcondition(automation: &IUIAutomation, binding: &Binding, expected: &SemanticPostcondition,
@@ -489,23 +517,56 @@ fn mouse_input(x: i32, y: i32, flags: windows::Win32::UI::Input::KeyboardAndMous
     } } }
 }
 
-fn os_activate(element: &IUIAutomationElement, lease: &NativeLease) -> Result<(), Failure> {
-    if USER_INPUT_EPOCH.load(Ordering::SeqCst) != lease.user_input_epoch {
-        return Err(Failure::not_sent("NATIVE_USER_PREEMPTED", "physical user input revoked the ControlLease"));
+// A physical click lands on whatever window owns the point. A target partly outside its window (a page laid out wider
+// than the real window) or under another window, even a part of its own window, must refuse here, before contact.
+fn contact_check(automation: &IUIAutomation, hwnd: HWND, element: &IUIAutomationElement, point: POINT)
+    -> Result<(), Failure> {
+    let occluded = |message: String| Failure::not_sent("NATIVE_TARGET_OCCLUDED", message);
+    if unsafe { GetAncestor(WindowFromPoint(point), GA_ROOT) } != hwnd {
+        return Err(occluded("the click point belongs to another window".into()));
     }
+    let found = unsafe { automation.ElementFromPoint(point) }.map_err(|error| occluded(error.to_string()))?;
+    let walker = unsafe { automation.RawViewWalker() }.map_err(uia_failure)?;
+    let mut current = Some(found);
+    for _ in 0..MAX_HIT_DEPTH {
+        let Some(candidate) = current else { break };
+        if unsafe { automation.CompareElements(&candidate, element) }.is_ok_and(|same| same.as_bool()) {
+            return Ok(());
+        }
+        current = unsafe { walker.GetParentElement(&candidate) }.ok();
+    }
+    Err(occluded("the click point does not resolve to the bound target".into()))
+}
+
+fn center_of(element: &IUIAutomationElement) -> Result<POINT, Failure> {
     let rect = unsafe { element.CurrentBoundingRectangle() }
         .map_err(|error| Failure::not_sent("NATIVE_GEOMETRY_UNAVAILABLE", error.to_string()))?;
     if rect.right <= rect.left || rect.bottom <= rect.top {
         return Err(Failure::not_sent("NATIVE_GEOMETRY_UNAVAILABLE", "target rectangle is empty"));
     }
+    Ok(POINT { x: rect.left + (rect.right - rect.left) / 2, y: rect.top + (rect.bottom - rect.top) / 2 })
+}
+
+fn os_activate(automation: &IUIAutomation, hwnd: HWND, element: &IUIAutomationElement, lease: &NativeLease)
+    -> Result<(), Failure> {
+    let preempted = || USER_INPUT_EPOCH.load(Ordering::SeqCst) != lease.user_input_epoch;
+    if preempted() {
+        return Err(Failure::not_sent("NATIVE_USER_PREEMPTED", "physical user input revoked the ControlLease"));
+    }
+    let center = center_of(element)?;
     let origin_x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
     let origin_y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
     let width = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
     let height = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
-    let center_x = rect.left + (rect.right - rect.left) / 2;
-    let center_y = rect.top + (rect.bottom - rect.top) / 2;
-    let x = absolute_coordinate(center_x, origin_x, width);
-    let y = absolute_coordinate(center_y, origin_y, height);
+    if unsafe { GetForegroundWindow() } != hwnd {
+        return Err(Failure::not_sent("NATIVE_FOREGROUND_MISMATCH", "the bound window lost the foreground before contact"));
+    }
+    contact_check(automation, hwnd, element, center)?;
+    if preempted() {
+        return Err(Failure::not_sent("NATIVE_USER_PREEMPTED", "physical user input revoked the ControlLease"));
+    }
+    let x = absolute_coordinate(center.x, origin_x, width);
+    let y = absolute_coordinate(center.y, origin_y, height);
     let common = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
     let inputs = [mouse_input(x, y, common | MOUSEEVENTF_MOVE),
         mouse_input(x, y, common | MOUSEEVENTF_LEFTDOWN),
@@ -668,13 +729,13 @@ impl Host {
         if self.used_leases.contains(&request.lease.lease_ref) {
             return Err(Failure::not_sent("NATIVE_CONTROL_LEASE_CONSUMED", "ControlLease was already consumed"));
         }
-        let (_, element) = exact_element(&self.automation, &binding, true)?;
+        let (hwnd, element) = exact_element(&self.automation, &binding, true)?;
         self.used_leases.insert(request.lease.lease_ref.clone());
-        os_activate(&element, &request.lease)?;
+        os_activate(&self.automation, hwnd, &element, &request.lease)?;
         let confirmed = wait_postcondition(&self.automation, &binding, &request.postcondition, true);
         Ok(json!({ "effectOutcome": "applied", "terminal": if confirmed { "confirmed" } else { "notObserved" },
             "providerCalls": 1, "safetyRelease": true,
-            "evidence": { "before": "foregroundLeaseAndExactUiaBinding", "after": if confirmed { "semanticPostcondition" } else { "notObserved" } } }))
+            "evidence": { "before": "foregroundLeaseExactUiaBindingAndContactPoint", "after": if confirmed { "semanticPostcondition" } else { "notObserved" } } }))
     }
 }
 
@@ -710,6 +771,8 @@ fn response<'a>(request_id: &'a str, result: Result<Value, Failure>) -> Response
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // UI Automation rectangles, the contact-point check and SendInput then share physical pixels on scaled displays.
+    let _ = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let expected_bootstrap = env::var("PYPROC_NATIVE_BOOTSTRAP")?;
     let policy: NativePolicy = serde_json::from_str(&env::var("PYPROC_NATIVE_POLICY")?)?;
     if !valid_digest(&expected_bootstrap) { return Err("PYPROC_NATIVE_BOOTSTRAP must be a lowercase SHA-256 value".into()); }
@@ -747,4 +810,102 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         write_frame(&mut writer, &reply)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use windows::core::{PCWSTR, w};
+    use windows::Win32::Foundation::HINSTANCE;
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows::Win32::System::Threading::GetCurrentThreadId;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DefWindowProcW, HWND_TOP, PostThreadMessageW, RegisterClassW, SW_SHOWNOACTIVATE,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos, ShowWindow, WINDOW_EX_STYLE, WM_QUIT, WNDCLASSW,
+        WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
+    };
+
+    #[test]
+    fn repeated_runtime_ids_collapse_to_one_candidate() {
+        let repeated = (0..121).map(|copy| (Some(vec![42, 7, 3]), copy));
+        assert_eq!(unique_by_identity(repeated), vec![0]);
+    }
+
+    #[test]
+    fn distinct_runtime_ids_stay_distinct() {
+        let items = [(Some(vec![42, 1]), "save"), (Some(vec![42, 2]), "save"), (Some(vec![42, 1]), "save")];
+        assert_eq!(unique_by_identity(items), vec!["save", "save"]);
+    }
+
+    #[test]
+    fn missing_runtime_ids_never_merge() {
+        let items = [(None, 1), (None, 2), (Some(vec![9]), 3), (Some(vec![9]), 4)];
+        assert_eq!(unique_by_identity(items), vec![1, 2, 3]);
+    }
+
+    unsafe extern "system" fn fixture_procedure(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+    }
+
+    // Windows this test owns, created on a thread that pumps their messages (UI Automation asks that thread), shown
+    // TopMost without activation. No input is sent: the check only asks which window and element own a point.
+    struct ContactFixture { window: isize, clear: isize, covered: isize, underneath: isize, outside: isize, thread: u32 }
+
+    fn open_contact_fixture() -> (ContactFixture, thread::JoinHandle<()>) {
+        let (sender, receiver) = mpsc::channel();
+        let ui = thread::spawn(move || unsafe {
+            let instance: HINSTANCE = GetModuleHandleW(None).unwrap().into();
+            let class = w!("PyProcMotorContactFixture");
+            RegisterClassW(&WNDCLASSW { lpfnWndProc: Some(fixture_procedure), hInstance: instance,
+                lpszClassName: class, ..Default::default() });
+            let popup = |x: i32, y: i32, width: i32, height: i32| {
+                let hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, class,
+                    w!("PyProc Motor Contact Fixture"), WS_POPUP, x, y, width, height, None, None, Some(instance), None)
+                    .unwrap();
+                let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                hwnd
+            };
+            let window = popup(60, 60, 320, 200);
+            let button = |text: PCWSTR, x: i32, y: i32, width: i32| CreateWindowExW(WINDOW_EX_STYLE(0), w!("BUTTON"),
+                text, WS_CHILD | WS_VISIBLE, x, y, width, 40, Some(window), None, Some(instance), None).unwrap();
+            let clear = button(w!("Clear"), 20, 20, 120);
+            let covered = button(w!("Covered"), 160, 20, 120);
+            let underneath = button(w!("Underneath"), 20, 100, 120);
+            let overlay = button(w!("Overlay"), 10, 90, 140);
+            SetWindowPos(overlay, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE).unwrap();
+            // Its center (340, 120) lies 20 pixels past the window's right edge, where a bystander window sits.
+            let outside = button(w!("Outside"), 260, 100, 160);
+            popup(60 + 150, 60 + 10, 140, 60);
+            popup(60 + 320, 60 + 100, 40, 40);
+            sender.send(ContactFixture { window: window.0 as isize, clear: clear.0 as isize, covered: covered.0 as isize,
+                underneath: underneath.0 as isize, outside: outside.0 as isize, thread: GetCurrentThreadId() }).unwrap();
+            let mut message = MSG::default();
+            while GetMessageW(&mut message, None, 0, 0).as_bool() {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        });
+        (receiver.recv().unwrap(), ui)
+    }
+
+    #[test]
+    fn contact_point_must_resolve_to_the_bound_target() {
+        let _ = unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+        let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+        let automation: IUIAutomation = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }.unwrap();
+        let (fixture, ui) = open_contact_fixture();
+        let window = HWND(fixture.window as *mut core::ffi::c_void);
+        let outcome = |button: isize| {
+            let element = unsafe { automation.ElementFromHandle(HWND(button as *mut core::ffi::c_void)) }.unwrap();
+            let point = center_of(&element).unwrap();
+            contact_check(&automation, window, &element, point).map_err(|failure| failure.code)
+        };
+        let results = [outcome(fixture.clear), outcome(fixture.covered), outcome(fixture.underneath),
+            outcome(fixture.outside)];
+        unsafe { PostThreadMessageW(fixture.thread, WM_QUIT, WPARAM(0), LPARAM(0)) }.unwrap();
+        ui.join().unwrap();
+        assert_eq!(results, [Ok(()), Err("NATIVE_TARGET_OCCLUDED"), Err("NATIVE_TARGET_OCCLUDED"),
+            Err("NATIVE_TARGET_OCCLUDED")], "clear, covered by a TopMost window, under a sibling, past the edge");
+    }
 }

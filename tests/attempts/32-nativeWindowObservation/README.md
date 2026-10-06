@@ -41,8 +41,11 @@
 | 2026-10-06 | nativeProbe click | headed Chrome에 1440 viewport 에뮬레이션, 실제 창 945px | 대상의 UI Automation 사각형 중심이 창 밖이었고 foreground 확인만 한 클릭이 아래에 있던 다른 앱 창에 한 번 들어갔다. 다음 단계는 foreground 불일치로 키를 보내지 않았다 | foreground 확인만으로는 물리 클릭을 막지 못한다 | 점의 소유 창과 대상 확인 추가 |
 | 2026-10-06 | fixtureProbe --only occlusion | WinForms 대상 위에 TopMost 덮개 창 | hit test를 뺀 빌드는 클릭이 덮개 창에 들어가 FAIL, `WindowFromPoint` 최상위 창과 `ElementFromPoint` 조상 확인을 넣은 빌드는 `PROBE_TARGET_OCCLUDED`, `notSent`로 PASS | 접촉 전 hit test가 다른 창 클릭을 막는다 | 배포 host `os_activate`에 같은 규칙 |
 | 2026-10-06 | fixtureProbe | WinForms fixture 두 창, 한국어 IME | observation, fences(다른 실행 파일, 바뀐 표면, 없는 대상), occlusion, hangul(Win32 edit에 `한글 입력`), dialog(OpenFileDialog 한글 파일명), surfaceChange 6/6 PASS | probe 단계의 가설은 실측됐다 | 계약과 설치본 gate |
+| 2026-10-06 | windowsHost `cargo test` | 배포 host 소스, 테스트가 띄운 Win32 창(TopMost 덮개, 같은 창의 겹친 버튼, 중심이 창 밖인 버튼과 그 자리의 옆 창) | SendInput 직전에 `contact_check`(점의 최상위 창, `ElementFromPoint` 조상)를 둔다. 맑은 대상은 통과하고 세 사례는 `NATIVE_TARGET_OCCLUDED`. 검사를 빼면 RED, 요소 확인만 빼면 같은 창 겹침 사례가 RED. 후보는 이름, 종류, automationId 조건의 캐시 조회 하나로 얻고 runtime id로 센다. 중복 제거를 빼면 RED. 테스트는 점의 주인만 묻고 입력은 보내지 않는다 | 졸업 게이트 3의 배포 host 부분과 4를 host에 넣었다 | 설치본 gate의 물리 클릭 사례는 foreground 잠금이 없는 CI에서 돈다 |
+| 2026-10-06 | test:windows-motor | Edge `--app` 창, 로컬 합성 페이지 | Chromium 창 웹 본문의 Save 버튼이 고유 대상으로 결속되고 Invoke 뒤 `saved`가 확인됐다. 이 구성에서는 중복 응답이 재현되지 않아 수정 전 host도 통과했다. 이 PC는 foreground 잠금 시간이 무한이라 fixture가 앞으로 오지 못해 기존 물리 클릭 사례가 수정 전후 모두 `NATIVE_FOREGROUND_MISMATCH`로 멈춘다 | Chromium 결속의 회귀는 gate가, 중복 제거 자체는 host 테스트가 문다 | 중복이 재현되는 Chromium 구성 찾기 |
 
 ## 판정
 
-진행 중. probe 수준의 관찰, 결속, 조합 입력, 선택창 조작과 hit test는 실측했다. `pyproc/control` 공개 operation,
-Motor Situation 결속, 절대 `setValue` 계약, 배포 host 반영과 설치본 gate(졸업 게이트 1~5)는 아직이다.
+진행 중. probe 수준의 관찰, 결속, 조합 입력, 선택창 조작과 hit test는 실측했다. 졸업 게이트 3의 배포 host 부분(접촉 전
+점 확인)과 4(runtime id 중복 제거)는 windowsHost에 들어갔다. `pyproc/control` 공개 operation, Motor Situation 결속,
+절대 `setValue` 계약, 독립 창 조작의 설치본 gate(졸업 게이트 1, 2, 5)는 아직이다.

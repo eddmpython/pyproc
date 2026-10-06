@@ -394,7 +394,7 @@ offset missing permission, ambiguous binding, unsupported evidence, or stale aut
 | `cooperative` | typed AppSpace action | exact app profile and existing transaction boundary | shipped |
 | `replay` | stored ReplayGraph edge | exact graph revision and edge capability | shipped, no live effect |
 | `accessibility` | Windows UI Automation pattern | explicit optional host and application allowlist | shipped on Windows |
-| `osInput` | Windows `SendInput` | exact app binding, foreground, one-shot `ControlLease` | shipped on Windows |
+| `osInput` | Windows `SendInput` | exact app binding, foreground, contact point, one-shot `ControlLease` | shipped on Windows |
 
 macOS accessibility and Linux AT-SPI are not shipped providers. DelegatedTab is a bounded optional extension
 authority described below and is not silently enabled by the default profile.
@@ -421,8 +421,12 @@ business approval, or a commit lease. It binds one application, exact intent dig
 one use.
 
 The Windows OS-input adapter rechecks executable identity, window title, foreground, target uniqueness, intent,
-and surface epoch before dispatch. Reuse, expiry, revocation, user activity, foreground loss, and window
-substitution fail closed. After contact, only the required key-up or pointer-up safety release may be sent.
+and surface epoch before dispatch. Uniqueness counts UI Automation runtime ids, so an element a Chromium window
+reports many times is still one target. Right before the click it checks that the bound window owns the point under
+the target's center and that the element there is the target or inside it: a target outside its window, or covered
+by another window or another part of its own window, refuses as `NATIVE_TARGET_OCCLUDED` with outcome `notSent`.
+Reuse, expiry, revocation, user activity, foreground loss, and window substitution fail closed. After contact, only
+the required key-up or pointer-up safety release may be sent.
 
 ## Receipts, episodes, and Evidence Pack
 
