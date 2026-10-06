@@ -52,4 +52,5 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 | [largeHeapEnvelope/](largeHeapEnvelope/) | 대형 힙에서 OS 프리미티브 비용은 어디서 무너지는가 (Browser Python OS 성능 봉투) | 진행 중 |
 | [stateKernel/](stateKernel/) | 내구 상태 3벌(저널·세션 이미지·machine generation)을 이중 구역 커널 하나로 통합할 수 있는가 | 진행 중 |
 | [30-crossSiteFrames/](30-crossSiteFrames/) | 같은 process와 교차 site iframe의 관찰 및 행동 권한 경계 | 진행 중 |
+| [32-nativeWindowObservation/](32-nativeWindowObservation/) | 브라우저 밖 Windows 창과 입력기를 같은 증거 경계로 관찰하고 조작 | 진행 중 (probe 실측, 공개 계약 전) |
 | [Web Machine](../webMachine/) | 서로 다른 guest engine을 같은 browser computer lifecycle/device/image 계약으로 다룰 수 있는가 | 졸업 -> `src/machine` + `tests/webMachine` |
