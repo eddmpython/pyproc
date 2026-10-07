@@ -1,6 +1,6 @@
 // run.mjs - installed optional Windows Motor setup, integrity, semantic action, and removal gate.
 import { strict as assert } from "node:assert";
-import { appendFile, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
@@ -149,11 +149,23 @@ try {
   // The host's own tests exercise what the gate's fixtures cannot reach without the foreground: repeated runtime ids
   // fold to one candidate, and a contact point owned by another window (or another part of its own) is refused. The
   // contact test only asks which window and element own a point; it sends no input.
-  const hostTests = run("cargo", ["test", "--release", "--locked", "--manifest-path",
-    join(packageRoot, "scripts", "actuation", "native", "windowsHost", "Cargo.toml"),
+  const hostRoot = join(packageRoot, "scripts", "actuation", "native", "windowsHost");
+  const hostTests = run("cargo", ["test", "--release", "--locked", "--manifest-path", join(hostRoot, "Cargo.toml"),
     "--target-dir", join(installed.tmp, "host tests")], { cwd: installed.appDir });
+  // The expected count comes from the packaged source cargo just tested, so adding a host test needs no edit here
+  // and a declared test that stops running (ignored, filtered or lost) still fails the gate.
+  let declaredHostTests = 0;
+  for (const name of await readdir(join(hostRoot, "src"), { recursive: true })) {
+    if (!name.endsWith(".rs")) continue;
+    const source = await readFile(join(hostRoot, "src", name), "utf8");
+    declaredHostTests += (source.match(/^\s*#\[test\]\s*$/gm) ?? []).length;
+  }
   await check("host tests fold repeated UI Automation answers and refuse a foreign contact point", () => {
-    assert.match(hostTests.stdout, /test result: ok\. 4 passed; 0 failed/);
+    assert.ok(declaredHostTests > 0, "the packaged host declares no tests");
+    const results = [...hostTests.stdout.matchAll(/test result: (\w+)\. (\d+) passed; (\d+) failed/g)];
+    assert.ok(results.length > 0, hostTests.stdout);
+    assert.deepEqual(results.map(([, status, , failed]) => [status, failed]), results.map(() => ["ok", "0"]));
+    assert.equal(results.reduce((total, [, , count]) => total + Number(count), 0), declaredHostTests);
   });
 
   const hostModule = await import(pathToFileURL(join(packageRoot, "scripts", "actuation", "windowsNativeHost.js")).href);
