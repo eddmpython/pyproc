@@ -9,7 +9,9 @@ import { fileURLToPath } from "node:url";
 import { USER_BROWSER_EXTENSION_ID, USER_BROWSER_HOST_NAME }
   from "../../scripts/browserControl/userBrowser/userBrowserChannel.mjs";
 import { UserBrowserTransport } from "../../scripts/browserControl/userBrowser/userBrowserTransport.js";
-import { userBrowserTargets } from "../../scripts/browserControl/userBrowser/userBrowserControl.mjs";
+import { connectUserBrowserControl, userBrowserBroker, userBrowserTargets }
+  from "../../scripts/browserControl/userBrowser/userBrowserControl.mjs";
+import { BrowserControlPolicy } from "../../scripts/browserControl/browserControlPolicy.js";
 import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
 
 async function errorOf(operation) {
@@ -40,6 +42,180 @@ class FakeConnection {
   close() { this.closed = true; }
 }
 
+// An authenticated extension connection whose browser refuses requests to the blocked sites the way the extension's
+// rules make it: a navigation to one is sent (requestWillBeSent, again for each redirect hop) and fails as blocked by
+// the client before Page.navigate answers. A start page in `pages` commits instead and sends the tab on by itself (a
+// script, a meta refresh): `frame` is what the tab's frame tree then shows (the browser's error page names the address
+// the rules refused as its unreachableUrl), `listed` where the extension lists the tab.
+class SiteConnection {
+  constructor({ blockSites = (params) => ({ enforcedBy: "extension", blockedHosts: params.hosts,
+    blockedDomains: params.domains, rules: params.hosts.length + params.domains.length, preloading: "off" }) } = {}) {
+    this.sent = [];
+    this.listeners = new Set();
+    this.blockSites = blockSites;
+    this.navigations = new Map();
+    this.pages = new Map();
+    this.page = null;
+    this.closed = false;
+  }
+  async send(method, params = {}, sessionId = undefined) {
+    this.sent.push({ method, params, sessionId });
+    if (method === "PyprocUserBrowser.blockSites") return this.blockSites(params);
+    if (method === "PyprocUserBrowser.openTab") return { targetId: "7" };
+    if (method === "PyprocUserBrowser.attachTab") return { sessionId: "userBrowser:7:1" };
+    if (method === "PyprocUserBrowser.closeTab") { this.page = null; return {}; }
+    if (method === "PyprocUserBrowser.listTabs") {
+      return { tabs: this.page ? [{ targetId: "7", url: this.page.listed, title: "" }] : [] };
+    }
+    if (method === "Page.getFrameTree") return { frameTree: { frame: { id: "frame", ...(this.page?.frame
+      || { url: "about:blank" }) } } };
+    if (method === "Runtime.evaluate") return { result: { type: "string", value: "complete" } };
+    if (method === "Page.navigate" && this.pages.has(params.url)) {
+      this.page = this.pages.get(params.url);
+      return { frameId: "frame", loaderId: "loader" };
+    }
+    if (method === "Page.navigate") {
+      const hops = this.navigations.get(params.url) || [params.url];
+      hops.forEach((url, index) => this.emit({ method: "Network.requestWillBeSent", sessionId, params: {
+        requestId: "nav-1", type: "Document", request: { method: "GET", url },
+        ...(index ? { redirectResponse: { status: 302 } } : {}) } }));
+      this.emit({ method: "Network.loadingFailed", sessionId, params: { requestId: "nav-1", type: "Document",
+        errorText: "net::ERR_BLOCKED_BY_CLIENT", blockedReason: "other" } });
+      return { frameId: "frame", errorText: "net::ERR_BLOCKED_BY_CLIENT" };
+    }
+    return {};
+  }
+  subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  emit(event) { for (const listener of [...this.listeners]) listener({ sessionId: null, params: {}, ...event }); }
+  close() { this.closed = true; }
+}
+
+const SITES_CONNECTED = Object.freeze({ product: "Chrome/155.0.0.0", protocolVersion: "1.3",
+  capabilities: Object.freeze(["blockSites"]) });
+
+// Blocked sites in the user's own browser, on the control host's side: the extension is asked for its rules before any
+// tab opens, a session whose extension does not hold them starts nothing, and the guard reports what they refused.
+async function assertSiteBlocking() {
+  const options = () => ({ policy: new BrowserControlPolicy({ targetOrigins: ["https://work.example"],
+    maxRisk: "externalEffect" }), timeoutMs: 5000, blockedHosts: ["link.coupang.com"], blockedDomains: ["coupa.ng"] });
+
+  const connection = new SiteConnection();
+  const broker = await userBrowserBroker({ connection, ...SITES_CONNECTED }, options());
+  assert.deepEqual(connection.sent.map((entry) => [entry.method, entry.params]),
+    [["PyprocUserBrowser.blockSites", { hosts: ["link.coupang.com"], domains: ["coupa.ng"] }]]);
+  assert.deepEqual(broker.inspect().requests, { mode: "any", enforcedBy: "extension",
+    blockedHosts: ["link.coupang.com"], blockedDomains: ["coupa.ng"], preloading: "off", blockedTotal: 0 });
+
+  // A start URL on a blocked host, or under a blocked domain, opens no tab and names the host.
+  for (const [url, blockedHost] of [["https://link.coupang.com/a?q=1", "link.coupang.com"],
+    ["https://www.coupa.ng/b", "www.coupa.ng"]]) {
+    const refused = await errorOf(() => broker.openTarget(url));
+    assert.deepEqual([refused?.code, refused?.outcome, refused?.details?.blockedHost],
+      ["BROWSER_CONTROL_PERMISSION_DENIED", "notSent", blockedHost], url);
+  }
+  assert.equal(connection.sent.some((entry) => entry.method === "PyprocUserBrowser.openTab"), false);
+
+  // A start page the site sends through redirects under a blocked domain: the extension refused the last hop, so the
+  // broker names where it was sent (never the query) and closes the tab.
+  connection.navigations.set("https://work.example/start", ["https://work.example/start",
+    "https://work.example/hop", "https://deep.coupa.ng/landing?id=1"]);
+  const redirected = await errorOf(() => broker.openTarget("https://work.example/start"));
+  assert.deepEqual([redirected?.code, redirected?.outcome, redirected?.details],
+    ["BROWSER_CONTROL_PERMISSION_DENIED", "applied",
+      { origin: "https://deep.coupa.ng", path: "/landing", blockedHost: "deep.coupa.ng" }]);
+  assert.equal(connection.sent.some((entry) => entry.method === "PyprocUserBrowser.closeTab"), true);
+  const navigation = broker.blockedRequests().requests;
+  assert.deepEqual(navigation.map(({ at, ...item }) => item), [{ method: "GET",
+    url: "https://deep.coupa.ng/landing", resourceType: "Document", blockedHost: "deep.coupa.ng" }]);
+
+  // Refusals a debugged tab reported are listed with their host; another extension's refusal of a site this session
+  // does not block, and a request to a blocked host that failed for another reason, are not this session's.
+  const tab = "userBrowser:7:1";
+  const request = (requestId, url, type) => connection.emit({ method: "Network.requestWillBeSent", sessionId: tab,
+    params: { requestId, type, request: { method: "GET", url } } });
+  const failed = (requestId, errorText = "net::ERR_BLOCKED_BY_CLIENT") => connection.emit({
+    method: "Network.loadingFailed", sessionId: tab, params: { requestId, errorText } });
+  request("r1", "https://link.coupang.com/pixel.gif?u=1", "Image");
+  failed("r1");
+  request("r2", "https://ads.example/banner.js", "Script");
+  failed("r2");
+  request("r3", "https://link.coupang.com/slow", "Fetch");
+  failed("r3", "net::ERR_TIMED_OUT");
+  const drained = broker.blockedRequests();
+  assert.deepEqual([drained.requests.map(({ at, ...item }) => item), drained.dropped], [[{ method: "GET",
+    url: "https://link.coupang.com/pixel.gif", resourceType: "Image", blockedHost: "link.coupang.com" }], 0]);
+  assert.equal(broker.blockedRequests().requests.length, 0);
+  assert.equal(broker.inspect().requests.blockedTotal, 2);
+  await broker.settle();
+
+  // A start page that commits and then sends the tab on by itself to a blocked site opens no tab either, whether the
+  // open sees the browser's error page there, or the page moved once it had loaded and the tab is found listed there,
+  // and whether or not the host keeps a tab that went outside its origins: a blocked site is never widened to.
+  connection.pages.set("https://work.example/script", { frame: { url: "chrome-error://chromewebdata/",
+    unreachableUrl: "https://deep.coupa.ng/script-landing?id=1" }, listed: "https://deep.coupa.ng/script-landing?id=1" });
+  connection.pages.set("https://work.example/meta", { frame: { url: "https://work.example/meta" },
+    listed: "https://link.coupang.com/meta-landing?id=1" });
+  const holding = await userBrowserBroker({ connection, ...SITES_CONNECTED }, { ...options(), holdOutside: true });
+  for (const [label, opener] of [["closes outside tabs", broker], ["holds outside tabs", holding]]) {
+    for (const [url, details] of [
+      ["https://work.example/script", { origin: "https://deep.coupa.ng", path: "/script-landing",
+        blockedHost: "deep.coupa.ng" }],
+      ["https://work.example/meta", { origin: "https://link.coupang.com", path: "/meta-landing",
+        blockedHost: "link.coupang.com" }],
+    ]) {
+      const closes = connection.sent.filter((entry) => entry.method === "PyprocUserBrowser.closeTab").length;
+      const moved = await errorOf(() => opener.openTarget(url, { waitUntil: "load" }));
+      assert.deepEqual([moved?.code, moved?.outcome, moved?.details], ["BROWSER_CONTROL_PERMISSION_DENIED", "applied",
+        details], `${label}: ${url}: ${moved?.message}`);
+      assert.equal(connection.sent.filter((entry) => entry.method === "PyprocUserBrowser.closeTab").length > closes,
+        true, `${label}: ${url} closes the tab`);
+    }
+  }
+  holding.close();
+
+  // Each tab the session attaches reports its requests, so a refusal there comes with the next result.
+  const watched = new FakeConnection();
+  await new UserBrowserTransport(watched, { watchRequests: true }).attach("7");
+  assert.deepEqual(watched.sent.map((entry) => entry.method), ["PyprocUserBrowser.attachTab", "Page.enable",
+    "Target.setAutoAttach", "Network.enable"]);
+
+  // An extension that cannot hold the rules starts nothing: one older than this control host (no capability, or no
+  // method), one whose rules did not install, and one whose answer leaves a site out or names another enforcer.
+  const older = () => { throw Object.assign(new Error("CDP PyprocUserBrowser.blockSites failed (-32601): "
+    + "'PyprocUserBrowser.blockSites' wasn't found"), { protocolRejected: true, protocolCode: -32601 }); };
+  for (const [label, capabilities, blockSites] of [
+    ["no capability", [], undefined],
+    ["unknown method", ["blockSites"], older],
+    ["rules not kept", ["blockSites"], () => { throw new Error("the browser did not keep the site rules"); }],
+    ["another enforcer", ["blockSites"], (params) => ({ enforcedBy: "puloto", blockedHosts: params.hosts,
+      blockedDomains: params.domains })],
+    ["a domain left out", ["blockSites"], (params) => ({ enforcedBy: "extension", blockedHosts: params.hosts,
+      blockedDomains: [] })],
+    // A refused navigation would still open a connection to the blocked site while network prediction is on.
+    ["prediction kept on", ["blockSites"], (params) => ({ enforcedBy: "extension", blockedHosts: params.hosts,
+      blockedDomains: params.domains, preloading: "notControlled" })],
+  ]) {
+    const refusing = new SiteConnection(blockSites ? { blockSites } : {});
+    const error = await errorOf(() => userBrowserBroker({ connection: refusing, ...SITES_CONNECTED, capabilities },
+      options()));
+    assert.equal(error?.code, "USER_BROWSER_SITE_BLOCKING_UNAVAILABLE", `${label}: ${error?.message}`);
+    assert.deepEqual([refusing.closed, refusing.sent.map((entry) => entry.method)],
+      [true, label === "no capability" ? [] : ["PyprocUserBrowser.blockSites"]], label);
+  }
+
+  // A session that blocks nothing asks the extension for nothing and reports no refusals.
+  const plain = new SiteConnection();
+  const plainBroker = await userBrowserBroker({ connection: plain, ...SITES_CONNECTED },
+    { ...options(), blockedHosts: [], blockedDomains: [] });
+  assert.deepEqual([plain.sent, plainBroker.inspect().requests, plainBroker.blockedRequests()],
+    [[], { mode: "any" }, null]);
+
+  // A name the extension's rules would refuse is refused before the browser is reached.
+  const misnamed = await errorOf(() => connectUserBrowserControl({ browser: "chrome",
+    targetOrigins: ["https://work.example"], methods: [], blockedHosts: ["under_score.example"] }));
+  assert.equal(misnamed instanceof TypeError && /one host name/.test(misnamed.message), true, String(misnamed));
+}
+
 export async function assertUserBrowserContract() {
   const root = new URL("../../scripts/browserControl/userBrowser/", import.meta.url);
   const packageManifest = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
@@ -49,12 +225,14 @@ export async function assertUserBrowserContract() {
   const host = await readFile(new URL("nativeHost/src/main.rs", root), "utf8");
 
   // The extension: one stable ID from its public key, the permissions a task window needs and nothing broader
-  // (`downloads` only to learn where the browser saved a download the task's own tab started).
+  // (`downloads` only to learn where the browser saved a download the task's own tab started;
+  // `declarativeNetRequest` only for the session rules that keep a task off the sites it blocks, before any request of
+  // the profile is sent; `privacy` only to turn network prediction off while those rules hold, and give it back).
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.version, packageManifest.version);
   assert.equal(extensionIdOf(manifest.key), USER_BROWSER_EXTENSION_ID);
-  assert.deepEqual([...manifest.permissions].sort(), ["debugger", "downloads", "nativeMessaging", "storage", "tabs",
-    "windows"]);
+  assert.deepEqual([...manifest.permissions].sort(), ["debugger", "declarativeNetRequest", "downloads",
+    "nativeMessaging", "privacy", "storage", "tabs", "windows"]);
   for (const key of ["host_permissions", "optional_permissions", "content_scripts", "externally_connectable"]) {
     assert.equal(Object.hasOwn(manifest, key), false, `${key} is not part of the user-browser extension`);
   }
@@ -72,6 +250,15 @@ export async function assertUserBrowserContract() {
   }
   assert.equal(worker.includes("canceled_by_user"), true);
   assert.equal(/chrome\.cookies|chrome\.scripting|WebSocket|fetch\s*\(|silent-debugger/.test(worker), false);
+
+  // Site rules, against an in-process chrome.* in its own process: installed only before a task's first tab, holding
+  // every request type of the profile, removed with prediction given back once the task's tabs closed whatever ended it,
+  // never removing the next task's rules, and a control host whose rules ended opens no tab without them.
+  const siteRules = JSON.parse(execFileSync(process.execPath,
+    [fileURLToPath(new URL("../fixtures/userBrowserSiteRules.mjs", import.meta.url))],
+    { timeout: 60000 }).toString());
+  assert.equal(siteRules.length >= 20, true);
+  for (const { name, ok, value } of siteRules) assert.equal(ok, true, `${name}: ${JSON.stringify(value)}`);
 
   // Connection boundaries, against an in-process chrome.* in its own process: nothing one control host started, was
   // replied to, or paired reaches the next one; tab-closing, history, file navigation, and cookie traffic stay out;
@@ -97,6 +284,7 @@ export async function assertUserBrowserContract() {
     sameReferrerOtherTabReported: false, sameUrlTwice: [["ambiguous", null]], forgottenDuringGraceReported: false,
     leftClientDownloadReported: false, expectationForUnattachedSession: true, expectationWithoutTimeout: true,
     userTabAttachable: true, userTabClosable: false, userTabKeptAfterEnd: true, ownTabClosedAtEnd: true,
+    siteRulesHeld: false, predictionGivenBack: true,
   });
 
   // The native host: one instance under a fresh random name, current user only, local clients only.
@@ -159,8 +347,11 @@ export async function assertUserBrowserContract() {
     [{ executable: resolve("browser.exe") }, /does not accept browser.executable/],
     [{ headed: true }, /does not accept browser.headed/],
     [{ requests: "safe" }, /nativeCdp/],
-    // The extension cannot refuse a request before it is sent, so a host the session must never reach refuses it.
-    [{ blockedHosts: ["link.coupang.com"] }, /blockedHosts needs the nativeCdp provider/],
+    [{ blockedDomains: ["https://coupang.com"] }, /blockedDomains entry must be one host name/],
+    // A name the URL parser takes but the extension's rules cannot match is refused here, not when the session starts.
+    [{ blockedHosts: ["under_score.example"] }, /blockedHosts entry must be one host name/],
+    [{ blockedDomains: ["under_score.example"] }, /blockedDomains entry must be one host name/],
+    [{ blockedDomains: Array.from({ length: 65 }, (_, index) => `d${index}.test`) }, /at most 64 blocked domains/],
   ]) {
     const error = await errorOf(() => validateMcpProductConfig({ ...manifestBase,
       browser: { ...manifestBase.browser, ...change } }));
@@ -169,5 +360,21 @@ export async function assertUserBrowserContract() {
   const misplaced = await errorOf(() => validateMcpProductConfig({ ...manifestBase,
     browser: { ...manifestBase.browser, provider: "nativeCdp" } }));
   assert.match(String(misplaced?.message), /need browser.provider userBrowser/);
+  // The extension's rules refuse every request to blocked hosts and domains before it is sent, so the user's own
+  // browser takes both lists, and only it takes domains.
+  const blocking = validateMcpProductConfig({ ...manifestBase, browser: { ...manifestBase.browser,
+    blockedHosts: [" Link.Coupang.com. ", "coupa.ng"], blockedDomains: ["Coupang.com", "한국.kr"] } });
+  assert.deepEqual([blocking.config.browser.blockedHosts, blocking.config.browser.blockedDomains,
+    blocking.env.PYPROC_BROWSER_BLOCKED_HOSTS, blocking.env.PYPROC_BROWSER_BLOCKED_DOMAINS],
+  [["link.coupang.com", "coupa.ng"], ["coupang.com", "xn--3e0b707e.kr"], "link.coupang.com,coupa.ng",
+    "coupang.com,xn--3e0b707e.kr"]);
+  const plainManifest = validateMcpProductConfig(manifestBase);
+  assert.deepEqual([plainManifest.config.browser.blockedDomains, plainManifest.env.PYPROC_BROWSER_BLOCKED_DOMAINS],
+    [undefined, undefined]);
+  const isolatedDomains = await errorOf(() => validateMcpProductConfig({ ...manifestBase, browser: {
+    ...manifestBase.browser, provider: "nativeCdp", userBrowser: undefined, blockedDomains: ["coupang.com"] } }));
+  assert.match(String(isolatedDomains?.message), /blockedDomains needs the userBrowser provider/);
+
+  await assertSiteBlocking();
   return true;
 }

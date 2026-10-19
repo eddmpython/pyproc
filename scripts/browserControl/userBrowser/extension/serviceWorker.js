@@ -11,12 +11,21 @@
 // where the browser saved it. A download item names no tab, so when two downloads of that URL appear together the
 // expectation is ambiguous and neither is reported. Downloads the user starts are never reported.
 //
+// A task may name hosts and domains it never reaches (`PyprocUserBrowser.blockSites`, before its first tab): the
+// extension then holds declarativeNetRequest session rules over the whole profile that refuse every request to them
+// before it is sent, with network prediction off, until the task ends (siteBlock.js says what is matched and why the
+// rules are not limited to the task's tabs). Ending the task for any reason, and a service worker that starts again,
+// remove them and give prediction back.
+//
 // Every control-host connection has a number the native host gives it. A request is bound to the connection it came
 // from: its reply, and any effect it completes after an await (authorization, a tab, an attachment), is dropped or
 // undone when that connection is gone, so nothing one control host started ever reaches the next one.
 import { HOST_NAME, PRESET_PAIRING_SHA256 } from "./config.js";
+import { blockSites, unblockSites } from "./siteBlock.js";
 
 const PROTOCOL_VERSION = "1.3";
+// What this extension does beyond the protocol version, so a control host asks for it only where it is done.
+const CAPABILITIES = Object.freeze(["blockSites"]);
 const PAIRING_WINDOW_MS = 120000;
 const MAX_RECONNECT_MS = 30000;
 // Tab-level domains the provider's observation and actions use; everything else is refused before chrome.debugger.
@@ -51,6 +60,35 @@ const DOWNLOAD_MATCH_MS = 5000;
 const DOWNLOAD_AMBIGUITY_GRACE_MS = 250;
 let expectationCounter = 0;
 const downloads = { expectations: new Map(), claimed: new Map(), recent: [] };
+
+// Site rules change one at a time, in the order they were asked for, so a task's release never removes the rules of
+// the task after it. `siteOwner` is the connection whose task holds them.
+let siteTurn = Promise.resolve();
+let siteOwner = 0;
+// The connection that asked for site rules works only while they hold: once its task ended (the debugging bar
+// cancelled, say) and they were removed, that connection opens and attaches nothing more.
+let sitesAskedBy = 0;
+function assertSitesHeld(epoch) {
+  if (sitesAskedBy && sitesAskedBy === epoch && siteOwner !== epoch) {
+    throw new ProviderError(-32000, "this task's site rules ended with it; the control host starts a new task");
+  }
+}
+function sites(work) {
+  const turn = siteTurn.then(work);
+  siteTurn = turn.catch(() => {});
+  return turn;
+}
+const siteApi = () => ({ dnr: chrome.declarativeNetRequest, prediction: chrome.privacy.network.networkPredictionEnabled });
+// Removes the rules and gives prediction back when `owner` holds them, or whoever holds them when `owner` is 0, once
+// `after` settles: an ending task's tabs close first, so none of them runs a moment without the rules.
+function releaseSites(owner = 0, after = Promise.resolve()) {
+  return sites(async () => {
+    await after;
+    if (owner && owner !== siteOwner) return true;
+    siteOwner = 0;
+    return await unblockSites(siteApi());
+  }).catch(() => false);
+}
 
 class ProviderError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -161,15 +199,19 @@ async function closeLeftoverTask() {
     try { await chrome.tabs.remove(tabId); } catch {}
   }
   await chrome.storage.session.remove("task");
+  // Whatever task held site rules ended with the service worker that ran it; its tabs are closed by now.
+  await releaseSites();
 }
 
 async function openTab(url, epoch) {
   if (!webUrl(url)) throw new ProviderError(-32602, "a task tab opens only an http(s) URL or about:blank");
+  assertSitesHeld(epoch);
   if (task.windowId === null) {
     const window = await chrome.windows.create({ url, focused: false, type: "normal" });
-    if (epoch !== connection) {
+    if (epoch !== connection || (sitesAskedBy === epoch && siteOwner !== epoch)) {
       try { await chrome.windows.remove(window.id); } catch {}
       assertCurrent(epoch);
+      assertSitesHeld(epoch);
     }
     task.windowId = window.id;
     const tabId = window.tabs[0].id;
@@ -180,9 +222,10 @@ async function openTab(url, epoch) {
     return { targetId: String(tabId) };
   }
   const tab = await chrome.tabs.create({ windowId: task.windowId, url, active: true });
-  if (epoch !== connection) {
+  if (epoch !== connection || (sitesAskedBy === epoch && siteOwner !== epoch)) {
     try { await chrome.tabs.remove(tab.id); } catch {}
     assertCurrent(epoch);
+    assertSitesHeld(epoch);
   }
   task.tabs.add(tab.id);
   task.created.add(tab.id);
@@ -193,10 +236,12 @@ async function openTab(url, epoch) {
 async function attachTab(targetId, epoch) {
   const tabId = tabIdOf(targetId);
   if (task.tabSessions.has(tabId)) throw new ProviderError(-32000, "the tab is already attached");
+  assertSitesHeld(epoch);
   await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
-  if (epoch !== connection || !inTask(tabId)) {
+  if (epoch !== connection || !inTask(tabId) || (sitesAskedBy === epoch && siteOwner !== epoch)) {
     try { await chrome.debugger.detach({ tabId }); } catch {}
     assertCurrent(epoch);
+    assertSitesHeld(epoch);
     throw new ProviderError(-32000, "the tab left the task while it was being attached");
   }
   const sessionId = `userBrowser:${tabId}:${++sessionCounter}`;
@@ -297,6 +342,10 @@ async function reportDownload(downloadId) {
 }
 
 async function endTask(reason) {
+  // Asked for before anything here awaits, so it comes before the rules of any task that starts after this one ends,
+  // and done once this task's tabs are closed.
+  let tabsClosed;
+  const released = releaseSites(0, new Promise((resolve) => { tabsClosed = resolve; }));
   for (const id of [...downloads.expectations.keys()]) forgetDownload(id);
   downloads.recent = [];
   const created = [...task.created];
@@ -304,12 +353,17 @@ async function endTask(reason) {
   task.windowId = null;
   task.tabs.clear();
   task.created.clear();
-  for (const sessionId of sessions) await detachSession(sessionId);
-  // Tabs the user handed over (dragged into the window, or opened there themselves) are never closed.
-  for (const tabId of created) {
-    try { await chrome.tabs.remove(tabId); } catch {}
+  try {
+    for (const sessionId of sessions) await detachSession(sessionId);
+    // Tabs the user handed over (dragged into the window, or opened there themselves) are never closed.
+    for (const tabId of created) {
+      try { await chrome.tabs.remove(tabId); } catch {}
+    }
+  } finally {
+    tabsClosed();
   }
   await chrome.storage.session.remove("task");
+  await released;
   void chrome.action.setBadgeText({ text: "" });
   return { ended: true, reason };
 }
@@ -368,7 +422,7 @@ async function handle(message, epoch) {
   switch (method) {
     case "PyprocUserBrowser.status":
       return { protocolVersion: PROTOCOL_VERSION, product: await product(), profileId: await profileId(),
-        paired: Boolean(await pairingSha256()), authorized: authorized() };
+        paired: Boolean(await pairingSha256()), authorized: authorized(), capabilities: CAPABILITIES };
     case "PyprocUserBrowser.pair":
       return await pair(params.keySha256, epoch);
     case "PyprocUserBrowser.hello": {
@@ -379,13 +433,36 @@ async function handle(message, epoch) {
         throw new ProviderError(-32003, "the pairing key is not the one this browser paired with");
       }
       authorizedConnection = epoch;
-      return { authorized: true, protocolVersion: PROTOCOL_VERSION, product: await product() };
+      return { authorized: true, protocolVersion: PROTOCOL_VERSION, product: await product(),
+        capabilities: CAPABILITIES };
     }
     case "PyprocUserBrowser.unpair":
       await endTask("unpaired");
       await chrome.storage.local.remove("pairingSha256");
       authorizedConnection = 0;
       return { unpaired: true };
+    case "PyprocUserBrowser.blockSites": {
+      // Only before the task's first tab: a tab that already ran was never kept off the sites from its start.
+      if (task.windowId !== null || task.tabs.size) {
+        throw new ProviderError(-32000, "sites are blocked before the task opens its first tab");
+      }
+      let answer;
+      try {
+        answer = await sites(async () => {
+          const installed = await blockSites(siteApi(), { hosts: params.hosts || [], domains: params.domains || [] });
+          siteOwner = epoch;
+          sitesAskedBy = epoch;
+          return installed;
+        });
+      } catch (error) {
+        throw new ProviderError(error instanceof TypeError ? -32602 : -32000, String(error?.message || error));
+      }
+      if (epoch !== connection) {
+        await releaseSites(epoch);
+        assertCurrent(epoch);
+      }
+      return answer;
+    }
     case "PyprocUserBrowser.openTab":
       return await openTab(params.url, epoch);
     case "PyprocUserBrowser.listTabs": {
@@ -431,6 +508,7 @@ function onHostMessage(message) {
   if (message?.method === "PyprocUserBrowserHost.clientConnected") {
     connection = Number(message.params?.connection) || 0;
     authorizedConnection = 0;
+    sitesAskedBy = 0;
     // Only now does the native host pass this extension's frames to the new client: nothing older reaches it.
     post({ method: "PyprocUserBrowserHost.ready", params: { connection } });
     return;
@@ -468,14 +546,17 @@ async function connect() {
     port = null;
     connection = 0;
     authorizedConnection = 0;
+    sitesAskedBy = 0;
     cancelPendingPair("the native host is gone");
     void endTask("hostGone");
     // Backs off while the host cannot start (not installed, or removed); a host that answers resets it.
     setTimeout(connect, reconnectMs);
     reconnectMs = Math.min(MAX_RECONNECT_MS, reconnectMs * 2);
   });
+  // The native host announces what this extension can do, so a status read without connecting tells a browser that
+  // still runs an extension older than its installed folder.
   post({ method: "PyprocUserBrowserHost.hello", params: { profileId: await profileId(), product: await product(),
-    protocolVersion: PROTOCOL_VERSION } });
+    protocolVersion: PROTOCOL_VERSION, capabilities: CAPABILITIES } });
 }
 
 chrome.action.onClicked.addListener(async () => {

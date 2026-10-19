@@ -18,9 +18,20 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   either request mode) makes the browser refuse every request to those hosts before it is sent: a navigation, each
   redirect hop, a subresource, a frame, a new tab, a worker, however the address spells the host. A refused navigation
   fails as blocked by the client; the tab's error page is judged and reported by the address it could not load, and
-  `automation.target.open` names the blocked host and place. Each refusal is listed in `blockedRequests` with its
-  `blockedHost`. Such a profile starts with page preloading off. The user-browser provider refuses the key, and a
-  session with requests `any` does not refuse a WebSocket to a blocked host. Gate: `test:blocked-hosts`.
+  `automation.target.open` names the blocked host and place, whether a redirect, a script, or a meta refresh sent the
+  start page there. Each refusal is listed in `blockedRequests` with its
+  `blockedHost`. Such a profile starts with page preloading off. A `nativeCdp` session with requests `any` does not
+  refuse a WebSocket to a blocked host. Gate: `test:blocked-hosts`.
+- **Blocked sites in the user's own browser.** The `userBrowser` provider takes `browser.blockedHosts` and the new
+  `browser.blockedDomains` (at most 64 domains, each covering itself and every host under it, `userBrowser` only).
+  Before the task's first tab the paired extension holds declarativeNetRequest session rules over the whole browser
+  profile that refuse every request to those sites before it is sent, whatever its type, and keeps network prediction
+  off while they hold; they end with the task and prediction goes back. `automation.space.inspect` names the enforcer
+  (`requests.enforcedBy: "extension"`) and both lists, and an extension that cannot hold them, or a profile where
+  another extension or a policy keeps network prediction on, ends the session with
+  `USER_BROWSER_SITE_BLOCKING_UNAVAILABLE`. The manifest check refuses a name the rules cannot take. The extension asks for the `declarativeNetRequest` and `privacy`
+  permissions and announces `capabilities: ["blockSites"]`; reload it after updating. Gate:
+  `test:user-browser-blocking`.
 
 ### Fixed
 
@@ -36,8 +47,15 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 ### 한국어
 
 `browser.blockedHosts`에 적은 호스트로 가는 요청은 이동, 리디렉트 단계, 페이지 자원, 프레임, 새 탭, 워커를 가리지
-않고 브라우저가 보내기 전에 거절한다. 거절한 이동의 오류 페이지는 불러오지 못한 주소로 판정하고 알린다. 사용자
-브라우저 연결은 이 키를 받지 않는다.
+않고 브라우저가 보내기 전에 거절한다. 거절한 이동의 오류 페이지는 불러오지 못한 주소로 판정하고 알린다. 시작
+페이지가 리디렉트, 스크립트, meta refresh로 차단 호스트에 보내도 탭을 열지 않고 그 호스트와 장소를 알린다.
+
+사용자 브라우저 연결도 `browser.blockedHosts`와 새 `browser.blockedDomains`(도메인과 그 아래 모든 호스트)를 받는다.
+작업의 첫 탭을 열기 전에 연결된 확장이 브라우저 프로필 전체에 요청 규칙을 두어 그 사이트로 가는 요청을 종류를
+가리지 않고 보내기 전에 거절하고, 규칙이 있는 동안 네트워크 예측을 끈다. 작업이 끝나면 규칙을 지우고 설정을
+돌려준다. 규칙을 둘 수 없는 확장이거나, 다른 확장이나 정책이 네트워크 예측을 켜 둔 프로필이면
+`USER_BROWSER_SITE_BLOCKING_UNAVAILABLE`로 아무것도 열지 않는다. 규칙이 받지 못하는 이름은 매니페스트 검사에서
+거절한다. 업데이트한 뒤에는 확장을 다시 불러온다.
 
 Windows Motor의 물리 클릭은 누르기 직전에 대상 중심의 점이 묶은 창의 것이고 그 점의 요소가 대상인지 확인한다. 창
 밖이나 다른 창, 같은 창의 다른 부분에 가린 대상은 보내지 않고 거절한다. Chromium 창이 같은 요소를 여러 번 돌려줘도

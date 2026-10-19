@@ -218,6 +218,8 @@ jobs:
       - run: npm run test:download-receipt
       # 사용자 브라우저 provider: native host, 확장, pipe, Motor를 격리 Edge와 Chrome에서 검증한다.
       - run: npm run test:user-browser
+      # 사용자 브라우저의 차단 사이트: 확장의 요청 규칙이 막은 사이트에는 요청도 연결도 닿지 않는다.
+      - run: npm run test:user-browser-blocking
       - run: npm run test:console-diagnostics
       - name: Build the browser desktop helper outside the checkout
         if: runner.os == 'Windows'

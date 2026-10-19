@@ -18,6 +18,9 @@ export const BROWSER_CONTROL_ERROR_CODES = Object.freeze({
   surfaceHeld: "BROWSER_CONTROL_SURFACE_HELD",
   targetUnavailable: "BROWSER_CONTROL_TARGET_UNAVAILABLE",
   targetCertificateUntrusted: "BROWSER_CONTROL_TARGET_CERTIFICATE_UNTRUSTED",
+  // The paired User Browser extension does not hold request rules for the session's blocked sites (it is older than
+  // the control host, or was not reloaded since), so the session starts nothing.
+  userBrowserSiteBlockingUnavailable: "USER_BROWSER_SITE_BLOCKING_UNAVAILABLE",
 });
 
 // Page.getFrameTree stops answering while the page waits on something only the controller can release: an open
@@ -127,7 +130,8 @@ export class BrowserControlPort {
     this._requestSeq = 0;
     this._eventSeq = 0;
     this._closed = false;
-    // Whether a held surface's place may be told; a broker over the user's own browser narrows it to its own tabs.
+    // Whether a held surface's place may be told (`(targetRef, target)`, the target as last seen when there is one); a
+    // broker over the user's own browser narrows it to its own tabs.
     this.revealsPlace = () => true;
   }
 
@@ -755,7 +759,8 @@ export class BrowserControlPort {
 
   _heldError(targetRef, target) {
     // A surface the task did not open (a tab the user handed over in their own browser) is held without its place.
-    const place = this.revealsPlace(targetRef) ? heldPlace(target?.url) : Object.freeze({ origin: "", path: "" });
+    const place = this.revealsPlace(targetRef, target) ? heldPlace(target?.url)
+      : Object.freeze({ origin: "", path: "" });
     return this._error(BROWSER_CONTROL_ERROR_CODES.surfaceHeld,
       "browser surface is outside permission and held until the permission is widened to it or it is closed",
       { details: Object.freeze({ targetRef, ...place }) });

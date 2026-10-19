@@ -157,9 +157,15 @@ fn announce(params: &Value, pipe_name: &str, origin: &str) -> io::Result<PathBuf
     fs::create_dir_all(&root)?;
     let path = root.join(format!("{profile_id}.json"));
     let temporary = root.join(format!("{profile_id}.{}.tmp", process::id()));
+    // What the extension says it can do: short names only, none when an older extension says nothing.
+    let capabilities: Vec<&str> = params["capabilities"].as_array().map(|names| names.iter()
+        .filter_map(Value::as_str)
+        .filter(|name| !name.is_empty() && name.len() <= 64 && name.chars().all(|c| c.is_ascii_alphanumeric()))
+        .take(16).collect()).unwrap_or_default();
     let body = json!({
         "protocol": RENDEZVOUS_PROTOCOL, "version": 1, "pipeName": pipe_name, "profileId": profile_id,
         "product": params["product"].as_str().unwrap_or(""), "origin": origin, "pid": process::id(),
+        "capabilities": capabilities,
     });
     fs::write(&temporary, serde_json::to_vec(&body).map_err(io::Error::other)?)?;
     fs::rename(&temporary, &path)?;

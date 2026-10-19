@@ -241,7 +241,8 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   const browserConfig = browserEnabled ? parseBrowserControlConfig(env, { timeoutMs }) : null;
   if (browserConfig) {
     assertBrowserRequestHost({ requests: browserConfig.requests, targetOrigins: browserConfig.targetOrigins,
-      providerKind, engineEnabled, recordingMode: recordingConfig?.mode || "", blockedHosts: browserConfig.blockedHosts });
+      providerKind, engineEnabled, recordingMode: recordingConfig?.mode || "", blockedHosts: browserConfig.blockedHosts,
+      blockedDomains: browserConfig.blockedDomains });
     assertPermissionRevisionHost({ permissionRevision: browserConfig.permissionRevision, providerKind,
       recordingMode: recordingConfig?.mode || "" });
   }

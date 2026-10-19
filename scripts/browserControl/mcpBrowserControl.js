@@ -12,7 +12,7 @@ import {
   inspectBrowserAutomationActions,
 } from "./browserAutomationCatalog.js";
 import { connectNodeBrowserControl } from "./browserControlBroker.mjs";
-import { assertBrowserRequestScope, normalizeBlockedHosts } from "./requestGuard.mjs";
+import { assertBrowserRequestScope, normalizeBlockedDomains, normalizeBlockedHosts } from "./requestGuard.mjs";
 import {
   ANY_TARGET_ORIGIN,
   BROWSER_CONTROL_COMMAND_RISKS,
@@ -206,8 +206,10 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   const targetOrigins = Object.freeze(parseOrigins(env.PYPROC_BROWSER_ALLOWED_ORIGINS));
   const requests = env.PYPROC_BROWSER_REQUESTS || "any";
   assertBrowserRequestScope({ requests, targetOrigins });
-  // Exact hosts the session never reaches; no permission revision changes them.
+  // Exact hosts, and domains with every host under them, the session never reaches; no permission revision changes
+  // them.
   const blockedHosts = normalizeBlockedHosts(csv(env.PYPROC_BROWSER_BLOCKED_HOSTS));
+  const blockedDomains = normalizeBlockedDomains(csv(env.PYPROC_BROWSER_BLOCKED_DOMAINS));
   const permissionRevision = env.PYPROC_BROWSER_PERMISSION_REVISION || "off";
   if (!["off", "controller"].includes(permissionRevision)) {
     throw new Error(`invalid PYPROC_BROWSER_PERMISSION_REVISION: ${permissionRevision}`);
@@ -216,6 +218,7 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
     targetOrigins,
     requests,
     blockedHosts,
+    blockedDomains,
     permissionRevision,
     trustedCertificates: parseTrustedCertificateEnvironment(env.PYPROC_BROWSER_TRUSTED_CERTIFICATES, targetOrigins),
     rawMethods: Object.freeze(rawMethods),
@@ -737,6 +740,7 @@ export class McpBrowserControl {
         viewport: this.config.viewport,
         requests: this.config.requests,
         blockedHosts: this.config.blockedHosts || [],
+        blockedDomains: this.config.blockedDomains || [],
       });
     }
     const broker = await this._brokerPromise;

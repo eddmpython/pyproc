@@ -1,7 +1,8 @@
 // userBrowserProduct.mjs - the user-browser provider end to end in an isolated Edge that loads the extension.
 // The gate installs the native host under a gate-only name and LOCALAPPDATA, so the user's own installation and
 // browsers are never touched, then drives the installed Control product through the extension: Motor, APX, screenshot,
-// a download the browser saves into the gate's own folder (received as a receipt and exported), and cleanup. Negative checks: a wrong pairing key, a tab outside the task, profile-touching commands, the pipe's
+// a download the browser saves into the gate's own folder (received as a receipt and exported), cleanup, and a session
+// whose blocked sites the extension enforces. Negative checks: a wrong pairing key, a tab outside the task, profile-touching commands, the pipe's
 // access list and single instance, and the host leaving with the browser.
 import { createServer } from "node:http";
 import { connect, createServer as createPipeServer } from "node:net";
@@ -225,6 +226,8 @@ async function journey({ kind, product, executable }, installed, app) {
     30000);
   check(`${label}the browser starts the native host, which announces its pipe for the extension's profile`,
     loaded.id === installed.extensionIds[0] && Boolean(host?.pipeName), JSON.stringify({ loaded, host }));
+  check(`${label}the announcement says what the running extension can do`,
+    JSON.stringify(host?.capabilities) === JSON.stringify(["blockSites"]), JSON.stringify(host?.capabilities));
   // The pipe's access list, read through a client handle of the pipe itself (no control host is connected yet).
   const user = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`.toLowerCase();
   const pipeShortName = host.pipeName.slice("\\\\.\\pipe\\".length);
@@ -335,6 +338,26 @@ async function journey({ kind, product, executable }, installed, app) {
     JSON.stringify(cleanup));
   await client.close();
   client = null;
+
+  // Blocked sites through the installed Control product, the way a consumer asks for them: before any tab the
+  // session's own inspection names the extension and both lists, and a start URL on a blocked site opens nothing.
+  // (test:user-browser-blocking proves what the rules refuse.) The names never resolve, so nothing can reach them.
+  const blockingPath = join(app.appDir, `pyproc-user-browser-blocking-${kind}.json`);
+  const { browser: journeyBrowser } = JSON.parse(await readFile(configPath, "utf8"));
+  await writeFile(blockingPath, JSON.stringify({ schemaVersion: 1, engine: { enabled: false }, timeoutMs: TIMEOUT_MS,
+    browser: { ...journeyBrowser, blockedHosts: ["link.blocked.invalid"], blockedDomains: ["ads.invalid"] } }));
+  client = await PyProcControlClient.start(blockingPath, { command: [process.execPath, controlScript],
+    cwd: app.appDir, startupTimeoutMs: TIMEOUT_MS, shutdownTimeoutMs: 10000 });
+  const siteRules = (await client.inspectSpace()).output.requests;
+  const blockedOpen = await client.openTarget("http://www.ads.invalid/landing",
+    { expectedRisk: "externalEffect", waitUntil: "load" }).then(() => null, (error) => error);
+  await client.close();
+  client = null;
+  check(`${label}the installed product's session names the extension as enforcing its blocked sites before any tab`,
+    siteRules?.enforcedBy === "extension" && siteRules.blockedHosts?.join() === "link.blocked.invalid"
+      && siteRules.blockedDomains?.join() === "ads.invalid" && blockedOpen?.code === "BROWSER_CONTROL_PERMISSION_DENIED"
+      && blockedOpen.details?.blockedHost === "www.ads.invalid",
+    JSON.stringify({ siteRules, code: blockedOpen?.code, details: blockedOpen?.details }));
 
   const raw = async () => new CdpConnection(userBrowserPipeChannel(await new Promise((resolve, reject) => {
     const socket = connect(host.pipeName);

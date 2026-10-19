@@ -4,9 +4,24 @@
 import { NodeCdpTransport } from "../nodeCdpTransport.js";
 
 export class UserBrowserTransport extends NodeCdpTransport {
-  constructor(connection) {
+  // `watchRequests`: the session blocks sites, so each tab it attaches also reports its requests, and a request the
+  // extension's rules refused there is listed with the next result (ExtensionSiteGuard).
+  constructor(connection, { watchRequests = false } = {}) {
     if (!connection || typeof connection.send !== "function") throw new TypeError("user browser connection is required");
     super(connection);
+    this._watchRequests = watchRequests === true;
+  }
+
+  async attach(targetId) {
+    const session = await super.attach(targetId);
+    if (!this._watchRequests) return session;
+    try {
+      await this._connection.send("Network.enable", {}, session.id);
+    } catch (error) {
+      await Promise.allSettled([this.detach(session)]);
+      throw error;
+    }
+    return session;
   }
 
   async listTargets() {
@@ -32,12 +47,13 @@ export class UserBrowserTransport extends NodeCdpTransport {
   }
 
   async describe(session) {
-    // Authority is re-checked against the session's own frame URL, never a listed one.
+    // Authority is re-checked against the session's own frame URL, never a listed one. The browser's error page for an
+    // address it could not load (a request the extension's site rules refused, say) is judged by that address.
     const deadline = Date.now() + 10000;
     let url = "";
     while (Date.now() < deadline) {
       const { frameTree } = await this._connection.send("Page.getFrameTree", {}, session.id);
-      url = frameTree?.frame?.url || "";
+      url = frameTree?.frame?.unreachableUrl || frameTree?.frame?.url || "";
       if (url) break;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }

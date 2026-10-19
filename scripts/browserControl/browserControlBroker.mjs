@@ -60,10 +60,26 @@ export class NodeBrowserControlBroker {
     this._timeoutMs = timeoutMs;
     this._viewport = viewport;
     this._ownedTargets = new Set();
+    // Raw ids of the tabs `openTarget` is opening now: this broker's own before they have a reference.
+    this._opening = new Set();
     // Whether a new tab the site sends outside the permission is kept for a widening (only when the host can widen).
     this._holdOutside = holdOutside === true;
     // In the user's own browser only the tabs this broker opened may tell where they went.
-    if (targets.kind === "user-browser") this.port.revealsPlace = (targetRef) => this._ownedTargets.has(String(targetRef));
+    if (targets.kind === "user-browser") {
+      this.port.revealsPlace = (targetRef, target = null) => this._ownedTargets.has(String(targetRef))
+        || this._opening.has(String(target?.id || ""));
+    }
+  }
+
+  // The refusal for a tab this broker is opening that the page sent to a blocked site (the guard or the extension
+  // refused the navigation; the browser shows its error page at that address), or null. Such a tab is closed, never
+  // held: no widening reaches a blocked site. The caller learns which host and where, never the query.
+  _blockedArrival(url) {
+    const blockedHost = this._guard?.blockedHostOf(url) || "";
+    if (!blockedHost) return null;
+    return new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+      `browser navigation went to a blocked host: ${blockedHost}`,
+      { outcome: "applied", details: Object.freeze({ ...heldPlace(url), blockedHost }) });
   }
 
   listTargets() { return this.port.listTargets(); }
@@ -138,6 +154,7 @@ export class NodeBrowserControlBroker {
     try {
       targetId = await this._targets.create("about:blank");
       created = true;
+      this._opening.add(String(targetId));
       sessionId = await this._targets.attach(targetId);
       unsubscribe = this._connection.subscribe((event) => {
         if (event.sessionId !== sessionId) return;
@@ -182,6 +199,11 @@ export class NodeBrowserControlBroker {
           const tree = await this._connection.send("Page.getFrameTree", {}, sessionId);
           const frame = tree.frameTree?.frame;
           if (frame?.url && frame.url !== "about:blank") {
+            // The browser's error page for an address it could not load is judged by that address: a start page
+            // that sent the tab on by itself (a script, a meta refresh) to a blocked site opens no tab.
+            const url = frame.unreachableUrl || frame.url;
+            const blocked = this._blockedArrival(url);
+            if (blocked) throw blocked;
             if (waitUntil !== "commit") {
               const ready = await this._connection.send("Runtime.evaluate", {
                 expression: "document.readyState",
@@ -192,12 +214,14 @@ export class NodeBrowserControlBroker {
             if (waitUntil === "commit"
               || (waitUntil === "domcontentloaded" && ["interactive", "complete"].includes(readyState))
               || (waitUntil === "load" && readyState === "complete")) {
-              finalTarget = { id: targetId, type: "page", url: frame.url, title: "" };
+              finalTarget = { id: targetId, type: "page", url, title: "" };
               break;
             }
           }
         } catch (error) {
-          if (!/context|frame|target/i.test(String(error?.message || error))) throw error;
+          if (error instanceof BrowserControlError || !/context|frame|target/i.test(String(error?.message || error))) {
+            throw error;
+          }
         }
         await delay(RETRY_MS);
       }
@@ -230,6 +254,13 @@ export class NodeBrowserControlBroker {
         try {
           const target = await this.port.resolveCreatedTarget(targetId);
           this._ownedTargets.add(target.targetRef);
+          // Inside the permission is not enough when any site is (a read-only session): a tab the page sent on to a
+          // blocked site is closed all the same.
+          const blocked = this._blockedArrival(target.url);
+          if (blocked) {
+            await Promise.allSettled([this.closeTarget(target.targetRef)]);
+            throw blocked;
+          }
           return Object.freeze({
             ...target,
             startup: Object.freeze({
@@ -243,13 +274,16 @@ export class NodeBrowserControlBroker {
           if (error?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld) {
             // Narrowed while it opened, or the loaded page moved on by itself: this task's own tab, held with its
             // place, or closed on a host that cannot widen. The place is where the port found the tab (the page may
-            // have left the URL it loaded); a port that does not reveal it leaves the loaded URL.
+            // have left the URL it loaded); a port that does not reveal it leaves the loaded URL. A tab that went on
+            // to a blocked site is closed whatever the host can widen.
             this._ownedTargets.add(error.details.targetRef);
             const place = error.details.origin
               ? Object.freeze({ origin: error.details.origin, path: error.details.path })
               : heldPlace(finalTarget.url);
-            if (!this._holdOutside) {
+            const blocked = this._blockedArrival(`${place.origin}${place.path}`);
+            if (!this._holdOutside || blocked) {
               await Promise.allSettled([this.closeTarget(error.details.targetRef)]);
+              if (blocked) throw blocked;
               throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
                 "browser navigation final URL is outside permission", { outcome: "applied", details: place });
             }
@@ -271,6 +305,7 @@ export class NodeBrowserControlBroker {
           cause: error,
         });
     } finally {
+      this._opening.delete(String(targetId));
       unsubscribe?.();
       if (sessionId) await Promise.allSettled([this._targets.detach(sessionId)]);
     }

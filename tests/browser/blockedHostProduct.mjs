@@ -3,7 +3,8 @@
 // redirect hop, and the host written with an ideographic dot, full-width letters, a trailing dot, a percent escape, or
 // a backslash before an @), in a read-only session and in one with requests "any", while the page's own site keeps
 // working. A start page
-// that redirects there, or a start URL on it, opens no tab and names the host. A control session without the list runs
+// that redirects there (or sends itself there by a script or a meta refresh), or a start URL on it, opens no tab and
+// names the host. A control session without the list runs
 // the same pages and proves each of those channels does reach the host, so the gate cannot pass vacantly.
 import { NativeCdpSpace } from "../../scripts/automationSpace/nativeCdpSpace.js";
 import { parseBrowserControlConfig } from "../../scripts/browserControl/mcpBrowserControl.js";
@@ -54,6 +55,13 @@ new Worker(URL.createObjectURL(new Blob([${JSON.stringify(
     `fetch(${JSON.stringify(`${blockedOrigin}/sink/worker`)}, { mode: "no-cors" }).catch(() => {});`)}],
   { type: "text/javascript" })));
 </script>`);
+  }
+  // Start pages that send the tab on by themselves once they committed.
+  if (pathname === "/away-script.html") {
+    return page(`<script>location.replace(${JSON.stringify(`${blockedOrigin}/sink/open-script?q=1`)})</script>`);
+  }
+  if (pathname === "/away-meta.html") {
+    return page(`<meta http-equiv="refresh" content="0;url=${blockedOrigin}/sink/open-meta?q=1">`);
   }
   return page("<p>sink</p>");
 }
@@ -200,6 +208,15 @@ try {
       redirected?.code === PERMISSION_DENIED && redirected.details?.blockedHost === BLOCKED
         && redirected.details?.path === "/sink/open-redirect" && !reachedBlocked().has("/sink/open-redirect"),
       JSON.stringify({ code: redirected?.code, message: redirected?.message, details: redirected?.details }));
+    for (const [way, file, landing] of [["a script", "away-script", "/sink/open-script"],
+      ["a meta refresh", "away-meta", "/sink/open-meta"]]) {
+      const moved = await guarded.refusal("automation.target.open",
+        { url: `${mainOrigin}/${file}.html`, expectedRisk: "externalEffect", waitUntil: "load" });
+      check(`${requests}: a start page sent to the blocked host by ${way} opens no tab and names the host and place`,
+        moved?.code === PERMISSION_DENIED && moved.details?.blockedHost === BLOCKED && moved.details?.path === landing
+          && !reachedBlocked().has(landing),
+        JSON.stringify({ code: moved?.code, message: moved?.message, details: moved?.details }));
+    }
     const direct = await guarded.refusal("automation.target.open",
       { url: `${blockedOrigin}/sink/open-direct`, expectedRisk: "externalEffect", waitUntil: "load" });
     check(`${requests}: a start URL on the blocked host is refused before anything is sent`,

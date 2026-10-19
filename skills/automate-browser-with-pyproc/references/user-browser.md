@@ -6,6 +6,7 @@
 - Install and pair
 - Product manifest
 - Authority boundary
+- Blocked sites
 - Downloads
 - Transport and pairing
 - Limits
@@ -36,7 +37,9 @@ host (built twice byte-identically in CI, with build provenance, pinned by SHA-2
 setup` from the wheel needs no Rust toolchain; an npm install or a source checkout builds the host with Cargo. Setup
 again while a browser runs the host swaps the file in and leaves the running host serving. Load the
 installed `extension` folder once from the browser's extension page (developer mode); its ID is always
-`olckphbppfoanoakaaemgfpobocgdogh`. Then pair:
+`olckphbppfoanoakaaemgfpobocgdogh`. After pyproc is updated, run setup again and click the extension's reload button:
+the browser keeps running the extension it loaded until then, so a session that blocks sites is refused until the
+running extension can block them. Then pair:
 
 ```powershell
 npx pyproc-control user-browser pair --browser edge
@@ -74,7 +77,8 @@ The authenticated extension confirms its identity before any task tab opens.
 The provider refuses `executable`, `headed`, `desktop`, `gpu`, and
 `trustedCertificates` (the browser is the user's), and `requests: "safe"`: a read-only session needs browser-level
 request interception, which only a browser pyproc launched offers. Origins, actions, risk, and the effect
-acknowledgement work exactly as for `nativeCdp`.
+acknowledgement work exactly as for `nativeCdp`. `browser.blockedHosts` and `browser.blockedDomains` name sites the
+task never reaches (see Blocked sites).
 
 ## Authority boundary
 
@@ -91,6 +95,47 @@ acknowledgement work exactly as for `nativeCdp`.
   `Transport.detached` with `canceled_by_user`.
 - Ending the task, closing the Control host, or losing the native host detaches every session and closes the task's
   own tabs.
+
+## Blocked sites
+
+`browser.blockedHosts` names exact hosts and `browser.blockedDomains` names domains, each covering itself and every
+host under it (`example.com` covers `www.example.com`, never `notexample.com`). Each list holds at most 64 bare host
+names; an internationalized name becomes punycode, and a name the extension's rules cannot take (an underscore, say)
+is refused by the manifest check (`pyproc-control --check`) and again when the session starts, before the browser is
+reached. Only this provider takes blocked domains.
+
+Right after the extension confirms its identity, before the task's first tab, the Control host sends
+`PyprocUserBrowser.blockSites {hosts, domains}`. The extension then holds one declarativeNetRequest session rule per
+name over the whole browser profile (every tab, popup, frame, worker, and service worker, the user's own tabs
+included) for every request type: a navigation and each redirect hop, subresources, frames, fetch and XHR, beacons and
+pings, media, sockets. A matched request is refused before it leaves the browser, whatever port, credentials, letter
+case, full-width letters, percent escapes, or trailing dot its address uses, since the browser matches the canonical
+address. The rules are not limited to the task's tabs because a tab or worker a task page starts makes its first
+request before its id is known. While they hold, the profile's network prediction is off, so a refused navigation
+opens no connection to the host either. A profile where another extension or a policy keeps prediction on gets no
+rules: its task would still open connections to the blocked sites, so the session ends as below and nothing opens.
+
+The extension answers with the lists it enforces, and `automation.space.inspect` reports them under `requests`:
+`{mode: "any", enforcedBy: "extension", blockedHosts, blockedDomains, preloading, blockedTotal}`, so a caller confirms
+the enforcer and every site before it opens anything. An extension that cannot hold the rules (older than this
+package, or not reloaded since setup replaced its folder), cannot turn prediction off, or answers anything else
+ends the session with
+`USER_BROWSER_SITE_BLOCKING_UNAVAILABLE`, and nothing opens. The extension says what it can do
+(`capabilities: ["blockSites"]`) in its hello, its status, and the native host's announcement, so
+`user-browser status` lists it per running profile.
+
+A start URL on a blocked site is refused before anything is sent, and a start page sent there while it opens (by a
+redirect, a script, or a meta refresh) opens no tab, also on a host that keeps tabs that leave its origins: both fail
+with `BROWSER_CONTROL_PERMISSION_DENIED`, whose `details` name the `origin`, `path`, and `blockedHost`. A task tab sent
+there later shows the browser's error page and is judged by that address, so it is held outside the permission at
+that place. Each tab the task attaches reports its requests, and a refusal there comes in the next `blockedRequests` with
+its `blockedHost` (never the query). A refusal in a tab or worker the task does not attach, or made by a
+cross-site frame's own page, is enforced but not listed.
+
+The rules are installed only before the task's first tab, and they end with the task: when the session closes, the
+Control host goes, the native host goes, the user cancels the debugging bar (that Control host then opens nothing
+more), the extension's service worker starts again, or the browser session ends (session rules never outlive it).
+They are removed once the task's own tabs have closed, and network prediction goes back to the user's setting.
 
 ## Downloads
 
@@ -135,6 +180,7 @@ seconds is let go.
 - A download is claimed only by the URL its tab's `Page.downloadWillBegin` named; a download the browser makes without
   one for the tab is not received and the click times out.
 - The extension is loaded in developer mode until it is published in the browser stores.
+- While a task blocks sites, the user's own tabs in that browser profile cannot reach those sites either.
 - Occlusion and focus: the task window opens unfocused. Behavior of `Input.*` while the window is minimized is not
   covered by the gate.
 
@@ -144,3 +190,12 @@ seconds is let go.
 isolated Edge and Chrome, and runs Motor with semantic and network proof, a screenshot, a download received as a
 receipt and exported, and task cleanup through the installed Control product. Negative checks cover a wrong pairing key, a tab outside the task, cookie, storage, and
 target commands, the pipe's access list and single instance, and the host leaving with the browser.
+
+`npm run test:user-browser-blocking` installs the host the same way, loads the extension into isolated Chrome and
+Edge, and builds the userBrowser space with a blocked host and a blocked domain on local `*.test` names. No request
+and no connection of any page channel, address spelling, popup, form, ping, redirect, or other tab of the profile
+reaches the blocked server while allowed twins are reached; the inspection names the extension before the first tab;
+start URLs and start pages a redirect, a script, or a meta refresh sends to a blocked site open no tab and name the
+place, also on a host that keeps outside tabs; closing the session removes the rules and gives prediction back; a
+control session without the lists proves every channel reaches the server; and with another extension holding network
+prediction on, a session that blocks sites starts nothing.

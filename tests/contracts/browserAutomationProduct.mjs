@@ -270,7 +270,7 @@ export async function assertBrowserAutomationProductContract() {
     ["상한 초과", browserOnlyWith({ ...manifest.browser,
       blockedHosts: Array.from({ length: BLOCKED_HOSTS_MAX + 1 }, (_, i) => `h${i}.test`) }), /at most 64/],
     ["frame provider", browserOnlyWith({ ...manifest.browser, provider: "frame", blockedHosts: ["coupa.ng"] }),
-      /blockedHosts needs the nativeCdp provider/],
+      /blockedHosts needs the nativeCdp or userBrowser provider/],
   ]) {
     const refused = await errorOf(() => validateMcpProductConfig(input));
     assert(pattern.test(refused?.message), `browser.blockedHosts manifest가 ${label}을 거절하지 않았다: ${refused?.message}`);

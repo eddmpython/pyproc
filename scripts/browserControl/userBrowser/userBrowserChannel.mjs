@@ -33,6 +33,13 @@ function running(pid) {
   catch (error) { return error?.code === "EPERM"; }
 }
 
+// What the running extension says it can do, in its announcement or its hello. A list that is missing came from an
+// extension (or a native host) older than this package: it can do none of it.
+function capabilitiesOf(said) {
+  const names = Array.isArray(said?.capabilities) ? said.capabilities : [];
+  return Object.freeze(names.filter((name) => typeof name === "string" && /^[A-Za-z0-9]{1,64}$/.test(name)).slice(0, 16));
+}
+
 /**
  * Native hosts the user's browsers started, one per browser profile running the extension. An announcement whose
  * host is gone (the browser was killed before it could let the host go) is removed.
@@ -53,7 +60,7 @@ export async function listUserBrowserHosts({ env = process.env } = {}) {
         continue;
       }
       hosts.push(Object.freeze({ profileId: host.profileId, product: String(host.product || ""),
-        pipeName: host.pipeName, pid: Number(host.pid) || 0 }));
+        pipeName: host.pipeName, pid: Number(host.pid) || 0, capabilities: capabilitiesOf(host) }));
     } catch { continue; }
   }
   return hosts;
@@ -122,7 +129,7 @@ function hostsOf(hosts, browser) {
 
 /**
  * Connect to the paired extension of `browser` and authenticate with the stored pairing key. Returns the flat-CDP
- * connection and the host it reached.
+ * connection, the host it reached, and what the running extension says it can do (`capabilities`).
  */
 export async function openUserBrowserConnection({ browser, profileId = "", timeoutMs = 30000, env = process.env } = {}) {
   if (typeof profileId !== "string" || (profileId && !/^[A-Za-z0-9-]{1,64}$/.test(profileId))) {
@@ -150,7 +157,8 @@ export async function openUserBrowserConnection({ browser, profileId = "", timeo
     if (status.profileId !== host.profileId || !status.authorized || status.product !== hello.product) {
       throw new Error("the user browser did not confirm the selected profile");
     }
-    return Object.freeze({ connection, host, product: hello.product, protocolVersion: hello.protocolVersion });
+    return Object.freeze({ connection, host, product: hello.product, protocolVersion: hello.protocolVersion,
+      capabilities: capabilitiesOf(hello) });
   } catch (error) {
     connection.close();
     throw error;
@@ -191,7 +199,7 @@ export async function userBrowserStatus({ env = process.env } = {}) {
   const profiles = [];
   for (const host of hosts) {
     profiles.push(Object.freeze({ profileId: host.profileId, product: host.product,
-      paired: Boolean(await readKey(env, host.profileId)) }));
+      paired: Boolean(await readKey(env, host.profileId)), capabilities: host.capabilities }));
   }
   // Pairings kept here, with whether their browser profile runs now (a paired browser that is closed is not lost).
   let names = [];

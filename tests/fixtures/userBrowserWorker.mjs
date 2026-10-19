@@ -22,6 +22,10 @@ const events = { action: listeners(), created: listeners(), attachedTab: listene
   removed: listeners(), windowRemoved: listeners(), focus: listeners(), debuggerEvent: listeners(), debuggerDetach: listeners(),
   downloadCreated: listeners(), downloadChanged: listeners() };
 const downloadItems = new Map();
+// The site-rule APIs, as a task that never blocks sites meets them: no rule is ever held, and every ended task still
+// gives network prediction back.
+const siteRules = new Map();
+let predictionCleared = 0;
 globalThis.chrome = {
   runtime: { connectNative: () => port, id: "fixture" },
   storage: {
@@ -67,6 +71,18 @@ globalThis.chrome = {
     sendCommand: async (target, method) => { sentCommands.push({ target, method }); return { method }; },
     onEvent: events.debuggerEvent, onDetach: events.debuggerDetach,
   },
+  declarativeNetRequest: {
+    isRegexSupported: async () => ({ isSupported: true }),
+    getSessionRules: async () => [...siteRules.values()],
+    updateSessionRules: async ({ removeRuleIds = [], addRules = [] }) => {
+      for (const id of removeRuleIds) siteRules.delete(id);
+      for (const rule of addRules) siteRules.set(rule.id, rule);
+    },
+  },
+  privacy: { network: { networkPredictionEnabled: {
+    set: async () => {}, get: async () => ({ value: true, levelOfControl: "controllable_by_this_extension" }),
+    clear: async () => { predictionCleared += 1; },
+  } } },
 };
 
 const KEY = "k".repeat(64);
@@ -303,6 +319,8 @@ out.userTabClosable = !(await reply(send("PyprocUserBrowser.closeTab", { targetI
 await reply(send("PyprocUserBrowser.endTask"));
 out.userTabKeptAfterEnd = tabs.has(userTab);
 out.ownTabClosedAtEnd = !tabs.has(reopenedTabId);
+out.siteRulesHeld = siteRules.size > 0;
+out.predictionGivenBack = predictionCleared > 0;
 
 console.log(JSON.stringify(out));
 process.exit(0);

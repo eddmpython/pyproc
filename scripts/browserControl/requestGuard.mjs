@@ -41,8 +41,15 @@
 // and changes nothing else about its pages. Sockets are not requests: in a read-only session every socket is refused
 // anyway, while a session with requests "any" does not refuse a socket to a blocked host. Only the nativeCdp provider
 // installs this interception (`assertBrowserRequestHost`).
+//
+// Blocked sites in the user's own browser: a userBrowser session may name blocked hosts and blocked domains
+// (`browser.blockedDomains`, each covering itself and every host under it). There the paired extension's request rules
+// refuse every request of the whole profile to them before it is sent, sockets included
+// (`userBrowser/extension/siteBlock.js`), so `ExtensionSiteGuard` below decides nothing: it reports what the task's
+// debugged tabs saw refused, and the start page a refused navigation was sent to, the way `RequestGuard` does.
 
 import { ANY_TARGET_ORIGIN } from "./browserControlPolicy.js";
+import { siteBlockRules } from "./userBrowser/extension/siteBlock.js";
 
 export const BROWSER_REQUEST_MODES = Object.freeze(["any", "safe"]);
 // Hosts one session may block: a short list of exact names, not a filter language.
@@ -121,13 +128,14 @@ export function assertBrowserRequestScope({ requests, targetOrigins }) {
 
 // The exact host names a session never reaches, in the one form the browser asks for them: lowercase, punycode, no
 // trailing dot, each once, in the given order. A blocked host is a name, never a URL, a pattern, or a parent domain
-// that would cover its subdomains: a caller names every host it blocks.
-export function normalizeBlockedHosts(values) {
-  if (!Array.isArray(values)) throw new TypeError("blockedHosts must be a list of host names");
+// that would cover its subdomains: a caller names every host it blocks, or names a blocked domain
+// (`normalizeBlockedDomains`) where the provider takes one.
+export function normalizeBlockedHosts(values, field = "blockedHosts") {
+  if (!Array.isArray(values)) throw new TypeError(`${field} must be a list of host names`);
   const hosts = new Set();
   for (const value of values) {
     const name = typeof value === "string" ? value.trim().replace(/\.$/, "") : "";
-    const refused = () => new TypeError(`blockedHosts entry must be one host name: ${JSON.stringify(value)}`);
+    const refused = () => new TypeError(`${field} entry must be one host name: ${JSON.stringify(value)}`);
     if (!name || NOT_A_HOST_NAME.test(name)) throw refused();
     let parsed;
     try { parsed = new URL(`https://${name}/`); } catch { throw refused(); }
@@ -136,17 +144,26 @@ export function normalizeBlockedHosts(values) {
       || !host || host.split(".").some((label) => !label)) throw refused();
     hosts.add(host);
   }
-  if (hosts.size > BLOCKED_HOSTS_MAX) throw new TypeError(`at most ${BLOCKED_HOSTS_MAX} blocked hosts`);
+  if (hosts.size > BLOCKED_HOSTS_MAX) {
+    throw new TypeError(`at most ${BLOCKED_HOSTS_MAX} blocked ${field === "blockedDomains" ? "domains" : "hosts"}`);
+  }
   return Object.freeze([...hosts]);
 }
 
-// The blocked host a URL asks for (one of `hosts`, a Set from `normalizeBlockedHosts`), or "". A request URL the
-// browser reports is already canonical, so its host only loses a trailing dot; a URL without a host names none.
-function blockedHostOf(url, hosts) {
-  if (!hosts.size) return "";
+// The domains a session never reaches, each with every host under it (`example.com` covers `www.example.com`, never
+// `notexample.com`), written and limited as blocked hosts are.
+export function normalizeBlockedDomains(values) {
+  return normalizeBlockedHosts(values, "blockedDomains");
+}
+
+// The blocked host a URL asks for (one of `hosts`, a Set from `normalizeBlockedHosts`, or a host that is one of
+// `domains` or lies under one), or "". A request URL the browser reports is already canonical, so its host only loses
+// a trailing dot; a URL without a host names none.
+function blockedHostOf(url, hosts, domains = []) {
+  if (!hosts.size && !domains.length) return "";
   let host;
   try { host = new URL(String(url || "")).hostname.replace(/\.$/, ""); } catch { return ""; }
-  return hosts.has(host) ? host : "";
+  return hosts.has(host) || domains.some((domain) => host === domain || host.endsWith(`.${domain}`)) ? host : "";
 }
 
 // Request patterns that pause every request whose address could name one of `hosts`: a canonical address holds its
@@ -158,13 +175,21 @@ function hostPatterns(hosts) {
 
 // Where a read-only session can run: only the nativeCdp provider installs the guard, the Python Machine page would
 // share the browser, and a recording of a "*" session could never be replayed (replay has no read-only mode). Blocked
-// hosts need the same interception, so only the nativeCdp provider takes them. The manifest and the control product
+// hosts need something that refuses a request before it is sent: the same interception (nativeCdp), or the paired
+// extension's request rules in the user's own browser (userBrowser), which alone also take blocked domains, and only
+// names those rules can match (host labels of letters, digits, and hyphens). The manifest and the control product
 // check this with the same function.
 export function assertBrowserRequestHost({ requests, targetOrigins, providerKind, engineEnabled, recordingMode = "",
-  blockedHosts = [] }) {
+  blockedHosts = [], blockedDomains = [] }) {
   assertBrowserRequestScope({ requests, targetOrigins });
-  if (blockedHosts.length && providerKind !== "nativeCdp") {
-    throw new TypeError("browser.blockedHosts needs the nativeCdp provider");
+  if (blockedHosts.length && providerKind !== "nativeCdp" && providerKind !== "userBrowser") {
+    throw new TypeError("browser.blockedHosts needs the nativeCdp or userBrowser provider");
+  }
+  if (blockedDomains.length && providerKind !== "userBrowser") {
+    throw new TypeError("browser.blockedDomains needs the userBrowser provider");
+  }
+  if (providerKind === "userBrowser" && (blockedHosts.length || blockedDomains.length)) {
+    siteBlockRules({ hosts: blockedHosts, domains: blockedDomains });
   }
   if (requests !== "safe") return;
   if (providerKind !== "nativeCdp") throw new TypeError("browser requests safe needs the nativeCdp provider");
@@ -557,5 +582,104 @@ export class RequestGuard {
     this._unsubscribe?.();
     this._unsubscribe = null;
     this._targetSessions.clear();
+  }
+}
+
+// How the browser fails a request an extension's rule refused; another extension (an ad blocker) fails its own the
+// same way, so only a request whose address names a blocked host is this guard's.
+const BLOCKED_BY_CLIENT = "net::ERR_BLOCKED_BY_CLIENT";
+// Requests of the debugged tabs still followed, newest kept: enough for every request a page has in flight.
+const WATCHED_KEEP = 500;
+
+// The reporting side of blocked sites in the user's own browser. `sites` is what the paired extension answered when it
+// installed its rules: the hosts and domains it enforces, and whether it holds the profile's network prediction off.
+// A debugged tab reports a request it sent (`Network.requestWillBeSent`, again for each redirect hop, so the last
+// address is the one refused) and how it ended; one that failed as blocked by the client on a blocked host is listed,
+// and a refused navigation is counted with where it was sent, synchronously, before the reply of the command that
+// started it is read.
+export class ExtensionSiteGuard {
+  constructor(connection, { blockedHosts = [], blockedDomains = [], preloading = "" } = {}) {
+    if (!connection || typeof connection.subscribe !== "function") throw new TypeError("connection is required");
+    this.mode = "any";
+    this.blockedHosts = Object.freeze([...blockedHosts]);
+    this.blockedDomains = Object.freeze([...blockedDomains]);
+    this._blockedHostSet = new Set(blockedHosts);
+    this._preloading = String(preloading);
+    this.hostNavigations = 0;
+    this.lastHostNavigation = null;
+    this._requests = new Map();
+    this._lastRequest = 0;
+    this._blocked = [];
+    this._dropped = 0;
+    this._blockedTotal = 0;
+    this._unsubscribe = connection.subscribe((event) => this._onEvent(event));
+  }
+
+  _onEvent(event) {
+    const params = event.params || {};
+    const key = `${event.sessionId || ""} ${params.requestId}`;
+    if (event.method === "Network.requestWillBeSent") {
+      this._lastRequest = Date.now();
+      this._requests.delete(key);
+      this._requests.set(key, Object.freeze({ method: String(params.request?.method || "GET").toUpperCase(),
+        url: String(params.request?.url || ""), resourceType: String(params.type || "") }));
+      if (this._requests.size > WATCHED_KEEP) this._requests.delete(this._requests.keys().next().value);
+    } else if (event.method === "Network.loadingFailed") {
+      const request = this._requests.get(key);
+      this._requests.delete(key);
+      const blockedHost = request && params.errorText === BLOCKED_BY_CLIENT ? this.blockedHostOf(request.url) : "";
+      if (!blockedHost) return;
+      const where = reportedUrl(request.url);
+      this._blockedTotal += 1;
+      this._blocked.push(Object.freeze({ method: request.method, url: where, resourceType: request.resourceType,
+        at: Date.now(), blockedHost }));
+      if (this._blocked.length > BLOCKED_KEEP) {
+        this._blocked.shift();
+        this._dropped += 1;
+      }
+      if (request.resourceType === "Document") {
+        this.hostNavigations += 1;
+        const parsed = new URL(request.url);
+        this.lastHostNavigation = Object.freeze({ origin: parsed.origin, path: parsed.pathname, blockedHost });
+      }
+    } else if (event.method === "Network.loadingFinished"
+      || (event.method === "Network.responseReceived" && params.type === "Document")) {
+      // A document that has its response was past the rules; its body may still be loading.
+      this._requests.delete(key);
+    }
+  }
+
+  // Waits until a navigation an action set off was refused or answered, so its refusal comes with that action's
+  // result: up to SETTLE_MAX_MS, ending once no navigation waits and none started for SETTLE_QUIET_MS.
+  async settle() {
+    const started = Date.now();
+    while (Date.now() - started < SETTLE_MAX_MS) {
+      const navigating = [...this._requests.values()].some((request) => request.resourceType === "Document");
+      if (!navigating && Date.now() - Math.max(this._lastRequest, started) >= SETTLE_QUIET_MS) return;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+
+  // The refusals since the last drain, oldest first, and how many older ones did not fit.
+  drainBlocked() {
+    const drained = Object.freeze({ requests: Object.freeze(this._blocked), dropped: this._dropped });
+    this._blocked = [];
+    this._dropped = 0;
+    return drained;
+  }
+
+  // The blocked host a URL asks for (one of the hosts, or a host under one of the domains), or "".
+  blockedHostOf(url) { return blockedHostOf(url, this._blockedHostSet, this.blockedDomains); }
+
+  // Who refuses the session's blocked sites and which: the paired extension, before any request of the profile.
+  inspect() {
+    return Object.freeze({ mode: this.mode, enforcedBy: "extension", blockedHosts: this.blockedHosts,
+      blockedDomains: this.blockedDomains, preloading: this._preloading, blockedTotal: this._blockedTotal });
+  }
+
+  close() {
+    this._unsubscribe?.();
+    this._unsubscribe = null;
+    this._requests.clear();
   }
 }

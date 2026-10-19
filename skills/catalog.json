@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:eba5513feff01683c18f8019dda56846c05b7f0817bd92580c98c280ec87114e",
-  "catalogDigest": "sha256:12f3732e7739dd63ce7d1fd900202cdd10b8e4b66b5a811677785ff218497508",
+  "generatedFromDigest": "sha256:5e7b96b99d7c2024f5a3e239bc562c6e6f544550b3760bd784a4964bf3e56f15",
+  "catalogDigest": "sha256:911e7014671d0627263569aaebb2c49d0c3de0e77c03bb5769cb338124fbcc3a",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -260,8 +260,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
-      "bytes": 45347,
-      "sha256": "sha256:449b4c9b0bf69e592d3502ddafb42461f9cd1a7cd32469d039384c56f64797b6"
+      "bytes": 45817,
+      "sha256": "sha256:ce7037a00eab27630412aed2c6ff3d8b0c096050aa67c4f7e354481ea6bb2e5d"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/frame-space.md",
@@ -275,8 +275,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/user-browser.md",
-      "bytes": 9042,
-      "sha256": "sha256:ba9e81884ae166d6bf848fc8e998992eb87235b607fed4d74a0797e2949dd63f"
+      "bytes": 13974,
+      "sha256": "sha256:2226755f167c26ae0e19e01505acf3e6d7481a0cbc75018368f6187cf6de212f"
     },
     {
       "path": "skills/benchmark-pyproc/references/benchmarking.md",
@@ -320,8 +320,8 @@
     },
     {
       "path": "skills/evolve-pyproc/references/contract-reality.md",
-      "bytes": 7121,
-      "sha256": "sha256:a00b8e4ac4a5383d2b9a189c119357a48834b02be45229dcb6dc75247473beae"
+      "bytes": 7858,
+      "sha256": "sha256:afbaa98f5c3cc1e8194d8e2ac7f378b35f6acb94133edaefa511793e81760f87"
     },
     {
       "path": "skills/evolve-pyproc/references/experimental-freeze.md",
