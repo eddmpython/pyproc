@@ -16,7 +16,7 @@ import {
 } from "../../scripts/browserControl/mcpBrowserControl.js";
 import { BROWSER_CONTROL_COMMAND_RISKS } from "../../scripts/browserControl/browserControlPolicy.js";
 import { NodeCdpTransport } from "../../scripts/browserControl/nodeCdpTransport.js";
-import { redactBrowserUrl } from "../../scripts/browserControl/browserObservation.js";
+import { redactBrowserUrl, redactImageAddress } from "../../scripts/browserControl/browserObservation.js";
 import { BrowserArtifactStore } from "../../scripts/browserControl/browserArtifactStore.js";
 import { SemanticInventory } from "../../scripts/automationSpace/semanticInventory.js";
 import { BrowserSecretInput } from "../../scripts/browserControl/browserSecretInput.js";
@@ -530,6 +530,76 @@ export async function assertBrowserAutomationContract() {
     && focused.result.nodes.some((node) => node.name === "Late editor")
     && focused.result.nodes.some((node) => node.name === "Completion saved"),
   "interactive snapshot이 전체 AX tree에서 control과 live status text를 먼저 고르지 않았다");
+
+  // A thumbnail proxy names its original image in `src`; that address must survive byte for byte.
+  const proxied = "https://thumbs.test/?src=%22https%3A%2F%2Fimages.test%2F20261021_1%2Fmain.jpg%3Ftype%3Dw860%22&type=f80_80";
+  const axNode = (index, role, address, name = "") => ({
+    nodeId: `image:${index}`, backendDOMNodeId: 300 + index, ignored: false,
+    role: { type: "role", value: role }, name: { type: "computedString", value: name },
+    properties: address === null ? [] : [{ name: "url", value: { type: "string", value: address } }],
+    childIds: [],
+  });
+  port.axNodes = [
+    axNode(0, "image", `${proxied}#zoom`),
+    axNode(1, "image", `${proxied}&access_token=must-not-leak`),
+    axNode(2, "image", `https://thumbs.test/?src=${encodeURIComponent(
+      "https://images.test/a.jpg?X-Amz-Signature=must-not-leak")}&type=f80`),
+    axNode(3, "img", "https://images.test/b.jpg?PHPSESSID=must-not-leak&w=80"),
+    axNode(4, "image", "https://images.test/c.jpg?v=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtdXN0LW5vdC1sZWFrIn0.c2ln"),
+    axNode(5, "image", "data:image/png;base64,iVBORw0KGgo="),
+    axNode(6, "image", "https://user:must-not-leak@images.test/d.jpg"),
+    axNode(7, "image", `https://images.test/${"a".repeat(2100)}.jpg`),
+    axNode(8, "image", null, "Decoration"),
+    axNode(9, "link", "https://shop.test/p/1?aff=must-not-leak", "Product"),
+    axNode(10, "button", "https://images.test/e.jpg", "Zoom"),
+  ];
+  const imaged = await automation.observe(session, { mode: "all", maxNodes: 20 });
+  assert(JSON.stringify(imaged.result.nodes.map((node) => node.url ?? null)) === JSON.stringify([
+    proxied,
+    `${proxied}&access_token=[redacted]`,
+    "https://thumbs.test/?src=[redacted]&type=f80",
+    "https://images.test/b.jpg?PHPSESSID=[redacted]&w=80",
+    "https://images.test/c.jpg?v=[redacted]",
+    null, null, null, null, null, null,
+  ]) && imaged.result.nodes.every((node) => node.locatorRef && !node.states?.url)
+    && !JSON.stringify(imaged.result).includes("must-not-leak") && !JSON.stringify(imaged.result).includes("eyJ"),
+  `image snapshot 주소가 원본 query를 보존하거나 credential을 가리지 않았다: ${JSON.stringify(
+    imaged.result.nodes.map((node) => node.url ?? null))}`);
+  assert(redactImageAddress("https://images.test/f.jpg?eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3OCJ9.c2ln&w=1")
+    === "https://images.test/f.jpg?[redacted]&w=1" && redactImageAddress("https://images.test/f.jpg?1699999999&w=1")
+    === "https://images.test/f.jpg?1699999999&w=1" && redactImageAddress("https://images.test/f.jpg?AbCdSig&w=1")
+    === "https://images.test/f.jpg?[redacted]&w=1" && redactImageAddress("blob:https://images.test/1") === null,
+  "이름 없는 token, 숫자 cache stamp, non-HTTP image 주소의 redaction이 어긋났다");
+  // Only names known to be harmless for an image keep their value: signed and session addresses use names no list of
+  // secret words finishes, so each of these (found on real CDNs and sign-in cookies) must come out [redacted].
+  const signedNames = ["pass", "hmac", "md5", "verify", "hdnts", "__gda__", "s", "st", "h", "hm", "oh", "nid_ses",
+    "NID_AUT", "Expires", "Key-Pair-Id", "X-Amz-Signature", "_nc_ohc", "ex", "is", "e", "t", "k", "email", "keyword"];
+  const signedMisses = signedNames.filter((name) => redactImageAddress(`https://cdn.test/a.jpg?${name}=must-not-leak&w=80`)
+    !== `https://cdn.test/a.jpg?${name}=[redacted]&w=80`);
+  assert(signedMisses.length === 0, `image 주소의 서명·세션 query 값을 가리지 않았다: ${signedMisses.join(", ")}`);
+  const harmless = "https://cdn.test/a.jpg?w=640&Width=640&height=320&q=75&quality=80&fit=crop&crop=faces&auto=format"
+    + "&fm=webp&format=jpg&dpr=2&v=3&type=f80_80&src=one.jpg&url=%2Fimg%2Fa.jpg";
+  assert(redactImageAddress(harmless) === harmless, "그림에 무해한 query가 바이트 그대로 남지 않았다");
+  const nestedCases = [
+    // A proxy's original image whose own query is harmless survives byte for byte, two addresses deep.
+    [`https://thumbs.test/?src=${encodeURIComponent(`https://images.test/?src=${encodeURIComponent(
+      "https://origin.test/a.jpg?type=m510")}`)}`, null],
+    // An unknown parameter anywhere inside the original address redacts the whole src value.
+    [`https://thumbs.test/?src=${encodeURIComponent("https://images.test/a.jpg?hdnts=must-not-leak")}&type=f80`,
+      "https://thumbs.test/?src=[redacted]&type=f80"],
+    [`https://thumbs.test/?url=${encodeURIComponent("/img/a.jpg?oh=must-not-leak")}&w=640`,
+      "https://thumbs.test/?url=[redacted]&w=640"],
+    [`https://thumbs.test/?src=${encodeURIComponent("//images.test/a.jpg?hm=must-not-leak")}`,
+      "https://thumbs.test/?src=[redacted]"],
+    [`https://thumbs.test/?src=${encodeURIComponent("https://user:must-not-leak@images.test/a.jpg")}`,
+      "https://thumbs.test/?src=[redacted]"],
+    // Deeper than the search reaches, an address that still carries a query is not known to be harmless.
+    [`https://a.test/?src=${encodeURIComponent(`https://b.test/?src=${encodeURIComponent(`https://c.test/?src=${
+      encodeURIComponent("https://d.test/a.jpg?w=1")}`)}`)}`, "https://a.test/?src=[redacted]"],
+  ];
+  const nestedMisses = nestedCases.filter(([address, expected]) => redactImageAddress(address) !== (expected ?? address));
+  assert(nestedMisses.length === 0, `프록시가 담은 원본 주소의 redaction이 어긋났다: ${JSON.stringify(
+    nestedMisses.map(([address]) => redactImageAddress(address)))}`);
   port.axNodes = null;
 
   const artifactReady = await automation.observe(session, {

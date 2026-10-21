@@ -4,14 +4,33 @@
 // the browser's own log (a resource that failed to load, a blocked request, a violation), each with `source`
 // (`consoleApi`, `exception`, or the browser log's own source such as `network`). A session that never asked for it
 // turns on neither the Runtime nor the Log domain. Text keeps secret-looking values out, and the URLs a text carries
-// lose their query.
+// lose their query. An image address in a snapshot keeps its query (`redactImageAddress`).
 import {
+  BROWSER_OBSERVATION_ADDRESS_LIMIT,
   BROWSER_OBSERVATION_DEFAULT_EVENTS,
   BROWSER_OBSERVATION_MAX_EVENTS,
   BROWSER_OBSERVATION_TEXT_LIMIT,
 } from "./browserObservationCatalog.js";
 
 const SECRET_PATTERN = /\b(authorization|bearer|password|passwd|secret|token|api[_-]?key|session)\b\s*[:=]\s*([^\s,;]+)/gi;
+// The query parameters (by lower-cased name) whose value an image address keeps as it is. Each says which image to show
+// and how (a thumbnail proxy's src or url, a size, crop, format or quality, a cache version), and none grants access:
+// Naver's src and type, Next.js url, w and q, imgix and Shopify width, height, fit, crop, auto, fm, dpr. Every other
+// value becomes [redacted]. Signed and session addresses name their credential in words no list of secret names can
+// finish (pass, hmac, md5, verify, hdnts, __gda__, st, hm, oh, nid_ses, NID_AUT, X-Amz-Signature), so a name not known
+// to be harmless is treated as one. h and s stay out on purpose: a height and a size on some servers, a hash and a
+// signature on others.
+const IMAGE_PARAMETERS = new Set(["src", "url", "type", "w", "width", "height", "q", "quality", "fit", "crop", "auto",
+  "fm", "format", "dpr", "v"]);
+// A query value without a name is kept only as a cache stamp of digits; any other one could be a bare token.
+const CACHE_STAMP = /^\d+$/;
+// A JSON Web Token, whatever the parameter carrying it is called.
+const TOKEN_VALUE = /^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./;
+// A value that is an address of its own (absolute or protocol-relative), as opposed to a size or a path.
+const NESTED_ADDRESS = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i;
+// How many addresses deep a parameter value (a thumbnail proxy's original image address) is searched. A deeper address
+// that still carries a query is not searched, so it is not known to be harmless.
+const NESTED_ADDRESS_DEPTH = 2;
 
 function sessionKey(ref) {
   return `${ref?.protocolVersion || ""}:${ref?.brokerId || ""}:${ref?.brokerEpoch || ""}:${ref?.sessionId || ""}:${ref?.targetRef || ""}`;
@@ -35,6 +54,59 @@ export function redactBrowserUrl(value) {
   } catch (error) {
     return "[redacted-url]";
   }
+}
+
+function decodedComponent(text) {
+  try { return decodeURIComponent(text.replace(/\+/g, " ")); }
+  catch (error) { return text; }
+}
+
+// A query split at `&`, with the value of every parameter not known to be harmless replaced by [redacted].
+function harmlessQuery(query, depth) {
+  return query.split("&").map((pair) => {
+    const split = pair.indexOf("=");
+    if (split < 0) return !pair || CACHE_STAMP.test(decodedComponent(pair)) ? pair : "[redacted]";
+    const name = pair.slice(0, split);
+    return harmlessParameter(decodedComponent(name), decodedComponent(pair.slice(split + 1)), depth)
+      ? pair : `${name}=[redacted]`;
+  }).join("&");
+}
+
+// A parameter is harmless when its name is an image parameter, its value is no token, and an address or query inside
+// the value (a proxy's original image) is itself harmless all the way down: no embedded credentials and every
+// parameter of its own harmless, within NESTED_ADDRESS_DEPTH addresses.
+function harmlessParameter(name, value, depth) {
+  if (!IMAGE_PARAMETERS.has(name.toLowerCase()) || TOKEN_VALUE.test(value)) return false;
+  const nested = value.replace(/^["']|["']$/g, "");
+  if (!NESTED_ADDRESS.test(nested) && !nested.includes("?")) return true;
+  if (depth >= NESTED_ADDRESS_DEPTH) return false;
+  let parsed;
+  try { parsed = new URL(nested, "https://nested.invalid/"); }
+  catch (error) { return false; }
+  if (parsed.username || parsed.password) return false;
+  const query = parsed.search.slice(1);
+  return !query || harmlessQuery(query, depth + 1) === query;
+}
+
+// The address of an image as a snapshot names it, whole enough to load: http(s) only, never with embedded credentials,
+// at most BROWSER_OBSERVATION_ADDRESS_LIMIT characters, without its fragment, and with its query kept, because a
+// thumbnail proxy names the original image there (`?src=<encoded address>`). A parameter known to be harmless for an
+// image (IMAGE_PARAMETERS, with an address it carries harmless too) keeps its exact bytes; every other value becomes
+// `[redacted]`, so an unfamiliar signature or session name never passes as harmless. The path is kept as it is.
+// Anything else returns null.
+export function redactImageAddress(value) {
+  if (typeof value !== "string" || !value || value.length > BROWSER_OBSERVATION_ADDRESS_LIMIT) return null;
+  let parsed;
+  try { parsed = new URL(value); }
+  catch (error) { return null; }
+  if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password) return null;
+  parsed.hash = "";
+  const query = parsed.search.slice(1);
+  if (query) {
+    const kept = harmlessQuery(query, 0);
+    if (kept !== query) parsed.search = kept;
+  }
+  return parsed.href.length > BROWSER_OBSERVATION_ADDRESS_LIMIT ? null : parsed.href;
 }
 
 function consoleArgument(argument) {

@@ -32,6 +32,14 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   `USER_BROWSER_SITE_BLOCKING_UNAVAILABLE`. The manifest check refuses a name the rules cannot take. The extension asks for the `declarativeNetRequest` and `privacy`
   permissions and announces `capabilities: ["blockSites"]`; reload it after updating. Gate:
   `test:user-browser-blocking`.
+- **Image addresses in snapshots.** A legacy `snapshot` node with role `image` carries `url`: the absolute http(s)
+  address of the source the browser chose, read from the accessibility tree the snapshot already reads (no other
+  browser method, so the user-browser extension's allowed methods stay as they are). The query stays, so a thumbnail
+  proxy's original image address survives; the fragment goes. Only parameters known to be harmless for an image keep
+  their value (`src`, `url`, `type`, `w`, `width`, `height`, `q`, `quality`, `fit`, `crop`, `auto`, `fm`, `format`,
+  `dpr`, `v`, with any address they carry harmless too); every other value becomes `[redacted]`, since signed and
+  session addresses use names no list of secret words finishes. An address with embedded credentials, a `data:` image,
+  or one longer than 2,048 characters is left out. Links and image buttons carry no `url`. Gate: `test:browser-control`.
 
 ### Fixed
 
@@ -56,6 +64,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 돌려준다. 규칙을 둘 수 없는 확장이거나, 다른 확장이나 정책이 네트워크 예측을 켜 둔 프로필이면
 `USER_BROWSER_SITE_BLOCKING_UNAVAILABLE`로 아무것도 열지 않는다. 규칙이 받지 못하는 이름은 매니페스트 검사에서
 거절한다. 업데이트한 뒤에는 확장을 다시 불러온다.
+
+legacy `snapshot`의 `image` 노드는 브라우저가 고른 그림의 절대 http(s) 주소를 `url`로 싣는다. 이미 읽는 접근성
+트리에서 가져오므로 다른 브라우저 명령을 부르지 않는다. query는 남겨 썸네일 프록시가 담은 원본 그림 주소가 그대로
+살고, fragment는 뗀다. 그림에 무해하다고 알려진 query(`src`, `url`, `type`, `w`, `width`, `height`, `q`,
+`quality`, `fit`, `crop`, `auto`, `fm`, `format`, `dpr`, `v`, 담은 주소도 같은 기준으로 무해할 때)만 값을 남기고
+나머지 값은 모두 `[redacted]`로 바꾼다. 서명·세션 주소는 비밀 단어 목록으로 다 잡을 수 없는 이름을 쓰기 때문이다.
+주소에 계정이 박혔거나 `data:` 그림이거나 2,048자를 넘으면 싣지 않는다. 링크와 그림 버튼은 `url`을 싣지 않는다.
 
 Windows Motor의 물리 클릭은 누르기 직전에 대상 중심의 점이 묶은 창의 것이고 그 점의 요소가 대상인지 확인한다. 창
 밖이나 다른 창, 같은 창의 다른 부분에 가린 대상은 보내지 않고 거절한다. Chromium 창이 같은 요소를 여러 번 돌려줘도

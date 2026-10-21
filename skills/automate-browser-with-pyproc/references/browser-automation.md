@@ -288,6 +288,20 @@ counts the reused answers; `resources.perception.reusableCaptures` holds one cap
 
 ### Complete legacy semantic inventories
 
+A legacy node carries its `role`, accessible `name`, `value`, `description`, `states`, and `locatorRef`. An `image`
+node also carries `url`, the absolute address of the source the browser chose for it (a picture source or srcset
+candidate, not only `src`), when that address is http(s), has no embedded credentials, and fits in 2,048 characters.
+The address keeps its query, so a thumbnail proxy's original image (`?src=<encoded address>`) survives byte for byte;
+it loses its fragment. Only parameters known to be harmless for an image keep their value: `src`, `url`, `type`, `w`,
+`width`, `height`, `q`, `quality`, `fit`, `crop`, `auto`, `fm`, `format`, `dpr` and `v` (any letter case), when the
+value is not a JSON Web Token and any address it carries is harmless in the same way, and a nameless value of digits
+(a cache stamp). Every other value becomes `[redacted]`, because signed and session addresses name their credential in
+words no list of secret names finishes (`hmac`, `hdnts`, `__gda__`, `hm`, `oh`, `NID_AUT`, `X-Amz-Signature`); `h`
+and `s` are left out because some servers use them for a hash and a signature. An address that needs a redacted value
+to load no longer loads, and that is the intended trade. An inline `data:` image, an image without a source, a link's
+destination, and an image button's source carry no `url`. The address comes from the accessibility tree the
+observation already reads, so no other browser method is called.
+
 A legacy observation returns at most 1,000 nodes per call. When more nodes belong to the captured snapshot,
 the result includes an opaque `continuationRef` and `inventory.complete` is false. Continue it with only the
 same `sessionRef`, `expectedRisk: "read"`, and that reference:

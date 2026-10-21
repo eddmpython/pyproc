@@ -38,6 +38,11 @@ const receiverHandler = async (req, res) => {
     lazyAssetRequests += 1;
     return false;
   }
+  if (url.pathname === "/browserControlThumb") {
+    res.writeHead(200, { "Content-Type": "image/svg+xml" });
+    res.end("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\"></svg>");
+    return true;
+  }
   if (url.pathname === "/browserControlRedirect") {
     res.writeHead(302, { Location: `${deniedOrigin}/tests/browser/browserControlFrameTarget.html?redirected=1` });
     res.end();
@@ -330,6 +335,15 @@ try {
   check("같은 process iframe 본문이 legacy semantic snapshot에 포함",
     sameFrameObserved.result?.nodes?.some((node) => node.name === "Frame action"),
   sameFrameObserved.result?.nodes?.filter((node) => node.name === "Frame action").length);
+  const imageNodes = sameFrameObserved.result?.nodes?.filter((node) => node.role === "image") || [];
+  const imageUrl = (name) => imageNodes.find((node) => node.name === name)?.url;
+  check("legacy snapshot의 image가 브라우저가 고른 주소를 query째 싣고 그림에 무해하지 않은 값을 가림",
+    imageUrl("Lazy product asset") === `${targetOrigin}/tests/browser/browserControlLazy.svg`
+      && imageUrl("Proxied product thumbnail") === `${targetOrigin}/browserControlThumb`
+        + "?src=%22https%3A%2F%2Fimages.test%2Fmain.jpg%22&type=f80_80&token=[redacted]"
+      && !sameFrameObserved.result.nodes.some((node) => node.role !== "image" && node.url)
+      && !JSON.stringify(sameFrameObserved.result.nodes).includes("must-redact"),
+  imageNodes.map((node) => `${node.name}=${node.url}`).join(" | "));
 
   const interactiveObserved = toolText(await callTool("browserObserve", {
     sessionRef,

@@ -4,6 +4,9 @@ export const BROWSER_OBSERVATION_MAX_EVENTS = 100;
 export const BROWSER_OBSERVATION_DEFAULT_EVENTS = 40;
 export const BROWSER_OBSERVATION_MAX_NODES = 1000;
 export const BROWSER_OBSERVATION_TEXT_LIMIT = 300;
+// The longest image address a snapshot carries. A cut address loads nothing, so a longer one is left out, not clipped.
+// 2048 characters is the address length every browser and server accepts (an inline data: image is far longer).
+export const BROWSER_OBSERVATION_ADDRESS_LIMIT = 2048;
 export const BROWSER_OBSERVATION_CONTINUATION_PATTERN = "^continuation:[A-Za-z0-9_-]+$";
 
 export const BROWSER_OBSERVATION_METHODS = Object.freeze([
