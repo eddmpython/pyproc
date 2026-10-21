@@ -31,6 +31,15 @@ const NESTED_ADDRESS = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i;
 // How many addresses deep a parameter value (a thumbnail proxy's original image address) is searched. A deeper address
 // that still carries a query is not searched, so it is not known to be harmless.
 const NESTED_ADDRESS_DEPTH = 2;
+// How many times a value is percent-decoded before it is judged. An address encoded twice (a proxy's src carrying another
+// proxy's url) shows its query only after the second decoding; a value still changing after this many is not judged
+// harmless.
+const DECODE_ROUNDS = 4;
+// A path segment that names an image by a long id with its size after it (googleusercontent's `<id>=s96-c`). The id is
+// the image's only name, so it stays.
+const IMAGE_ID_SIZE = /^[A-Za-z0-9_-]{33,}=[A-Za-z0-9_.:+-]*$/;
+// The value of a path option kept for an image parameter: a size, a format, a crop word.
+const PLAIN_OPTION = /^[A-Za-z0-9_.:+-]*$/;
 
 function sessionKey(ref) {
   return `${ref?.protocolVersion || ""}:${ref?.brokerId || ""}:${ref?.brokerEpoch || ""}:${ref?.sessionId || ""}:${ref?.targetRef || ""}`;
@@ -61,39 +70,97 @@ function decodedComponent(text) {
   catch (error) { return text; }
 }
 
-// A query split at `&`, with the value of every parameter not known to be harmless replaced by [redacted].
+// Text percent-decoded until it stops changing, or null when it still changes after DECODE_ROUNDS decodings.
+function fullyDecoded(text) {
+  let current = text;
+  for (let round = 0; round < DECODE_ROUNDS; round += 1) {
+    const next = decodedComponent(current);
+    if (next === current) return current;
+    current = next;
+  }
+  return decodedComponent(current) === current ? current : null;
+}
+
+// A query split at `&` and `;` (both separate parameters on some servers), with the value of every parameter not known
+// to be harmless replaced by [redacted]. The separators and every kept parameter keep their exact bytes.
 function harmlessQuery(query, depth) {
-  return query.split("&").map((pair) => {
+  return query.replace(/[^&;]+/g, (pair) => {
     const split = pair.indexOf("=");
-    if (split < 0) return !pair || CACHE_STAMP.test(decodedComponent(pair)) ? pair : "[redacted]";
+    if (split < 0) return CACHE_STAMP.test(decodedComponent(pair)) ? pair : "[redacted]";
     const name = pair.slice(0, split);
     return harmlessParameter(decodedComponent(name), decodedComponent(pair.slice(split + 1)), depth)
       ? pair : `${name}=[redacted]`;
-  }).join("&");
+  });
 }
 
-// A parameter is harmless when its name is an image parameter, its value is no token, and an address or query inside
-// the value (a proxy's original image) is itself harmless all the way down: no embedded credentials and every
-// parameter of its own harmless, within NESTED_ADDRESS_DEPTH addresses.
+// A parameter is harmless when its name is an image parameter, its value (decoded until it stops changing) is no token,
+// and a value with an address, query, fragment or parameter separator in it (a proxy's original image) is a harmless
+// address; any other value is a plain name or path whose segments are harmless.
 function harmlessParameter(name, value, depth) {
-  if (!IMAGE_PARAMETERS.has(name.toLowerCase()) || TOKEN_VALUE.test(value)) return false;
-  const nested = value.replace(/^["']|["']$/g, "");
-  if (!NESTED_ADDRESS.test(nested) && !nested.includes("?")) return true;
+  if (!IMAGE_PARAMETERS.has(name.toLowerCase())) return false;
+  const decoded = fullyDecoded(value);
+  if (decoded === null || TOKEN_VALUE.test(decoded)) return false;
+  const nested = decoded.replace(/^["']|["']$/g, "");
+  if (NESTED_ADDRESS.test(nested) || /[?#&;=]/.test(nested)) return harmlessAddress(nested, depth);
+  return redactedPath(nested, depth) === nested;
+}
+
+// An address inside a value or a path segment is harmless when it is within NESTED_ADDRESS_DEPTH addresses, carries no
+// credentials, and its path, query and fragment are harmless all the way down.
+function harmlessAddress(text, depth) {
   if (depth >= NESTED_ADDRESS_DEPTH) return false;
   let parsed;
-  try { parsed = new URL(nested, "https://nested.invalid/"); }
+  try { parsed = new URL(text, "https://nested.invalid/"); }
   catch (error) { return false; }
   if (parsed.username || parsed.password) return false;
+  if (redactedPath(parsed.pathname, depth + 1) !== parsed.pathname) return false;
   const query = parsed.search.slice(1);
-  return !query || harmlessQuery(query, depth + 1) === query;
+  const fragment = parsed.hash.slice(1);
+  return (!query || harmlessQuery(query, depth + 1) === query)
+    && (!fragment || harmlessQuery(fragment, depth + 1) === fragment);
+}
+
+// A path with every segment that could carry a credential redacted (redactedSegment). Any other segment keeps its
+// bytes, because a path names the image itself.
+function redactedPath(path, depth) {
+  return path.split("/").map((segment) => (segment ? redactedSegment(segment, depth) : segment)).join("/");
+}
+
+// One path segment. Decoded until it stops changing, a JSON Web Token becomes [redacted]; a segment with an address,
+// query or fragment in it stays only as a harmless address; one whose `;` or `=` was percent-encoded becomes [redacted].
+// A `;name=value` matrix parameter keeps its value only for an image parameter with a plain value. The rest of a segment
+// with `=` in it (a session or signature in the path, as Akamai's `hdnts=exp=...~hmac=...`) becomes [redacted] unless it
+// is an image option list (`width=640,quality=75`, every option an image parameter with a plain value) or a long image
+// id with its size (IMAGE_ID_SIZE). A segment that grants access only by being unguessable (an image id) is the image's
+// only name, so it is kept: such an address shows that image to whoever reads it, as the page did.
+function redactedSegment(segment, depth) {
+  const decoded = fullyDecoded(segment);
+  if (decoded === null || TOKEN_VALUE.test(decoded)) return "[redacted]";
+  if (/[?#&]/.test(decoded) || decoded.includes("//")) return harmlessAddress(decoded, depth) ? segment : "[redacted]";
+  if (!/[;=]/.test(decoded)) return segment;
+  if (decoded !== segment) return "[redacted]";
+  const [head, ...parameters] = segment.split(";");
+  const options = head.split(",");
+  const kept = !head.includes("=") || IMAGE_ID_SIZE.test(head)
+    || options.every((option) => option.includes("=") && redactedOption(option) === option);
+  return [kept ? head : "[redacted]", ...parameters.map(redactedOption)].join(";");
+}
+
+function redactedOption(option) {
+  const split = option.indexOf("=");
+  if (split < 0) return CACHE_STAMP.test(option) ? option : "[redacted]";
+  const name = option.slice(0, split);
+  return IMAGE_PARAMETERS.has(name.toLowerCase()) && PLAIN_OPTION.test(option.slice(split + 1))
+    ? option : `${name}=[redacted]`;
 }
 
 // The address of an image as a snapshot names it, whole enough to load: http(s) only, never with embedded credentials,
 // at most BROWSER_OBSERVATION_ADDRESS_LIMIT characters, without its fragment, and with its query kept, because a
 // thumbnail proxy names the original image there (`?src=<encoded address>`). A parameter known to be harmless for an
-// image (IMAGE_PARAMETERS, with an address it carries harmless too) keeps its exact bytes; every other value becomes
-// `[redacted]`, so an unfamiliar signature or session name never passes as harmless. The path is kept as it is.
-// Anything else returns null.
+// image (IMAGE_PARAMETERS, with an address it carries harmless too, however many times it was encoded) keeps its exact
+// bytes; every other value becomes `[redacted]`, so an unfamiliar signature or session name never passes as harmless.
+// `&` and `;` both separate parameters. The path keeps its bytes except a segment that carries a token, an address with
+// a query, or a session option (redactedSegment). Anything else returns null.
 export function redactImageAddress(value) {
   if (typeof value !== "string" || !value || value.length > BROWSER_OBSERVATION_ADDRESS_LIMIT) return null;
   let parsed;
@@ -101,6 +168,8 @@ export function redactImageAddress(value) {
   catch (error) { return null; }
   if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password) return null;
   parsed.hash = "";
+  const path = redactedPath(parsed.pathname, 0);
+  if (path !== parsed.pathname) parsed.pathname = path;
   const query = parsed.search.slice(1);
   if (query) {
     const kept = harmlessQuery(query, 0);

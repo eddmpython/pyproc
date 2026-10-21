@@ -600,6 +600,41 @@ export async function assertBrowserAutomationContract() {
   const nestedMisses = nestedCases.filter(([address, expected]) => redactImageAddress(address) !== (expected ?? address));
   assert(nestedMisses.length === 0, `프록시가 담은 원본 주소의 redaction이 어긋났다: ${JSON.stringify(
     nestedMisses.map(([address]) => redactImageAddress(address)))}`);
+  // An encoding, a separator or a place the checks above do not look at must not carry a credential through: an address
+  // encoded twice, a nested fragment, `;` between parameters, and a token in the path. What a server needs to show the
+  // image (Naver's quoted dthumb src, an image option list, a long image id in the path) keeps its bytes.
+  const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtdXN0LW5vdC1sZWFrIn0.c2ln";
+  const hiddenCases = [
+    [`https://img.test/_next/image?url=${encodeURIComponent(encodeURIComponent(
+      "https://bucket.test/a.jpg?X-Amz-Signature=must-not-leak"))}&w=640`, "https://img.test/_next/image?url=[redacted]&w=640"],
+    [`https://thumbs.test/?src=${encodeURIComponent("https://images.test/a.jpg%3Fsig%3Dmust-not-leak")}`,
+      "https://thumbs.test/?src=[redacted]"],
+    [`https://thumbs.test/?src=${encodeURIComponent("https://images.test/a.jpg#access_token=must-not-leak")}`,
+      "https://thumbs.test/?src=[redacted]"],
+    [`https://thumbs.test/?src=${encodeURIComponent("https://images.test/a.jpg#w=80")}`, null],
+    ["https://images.test/a.jpg?type=m510;token=must-not-leak", "https://images.test/a.jpg?type=m510;token=[redacted]"],
+    ["https://images.test/a.jpg?type=m510%3Btoken%3Dmust-not-leak&w=1", "https://images.test/a.jpg?type=[redacted]&w=1"],
+    ["https://images.test/a.jpg?1699999999;w=80", null],
+    [`https://images.test/${jwt}/a.jpg`, "https://images.test/[redacted]/a.jpg"],
+    ["https://images.test/hdnts=exp=1~acl=/*~hmac=must-not-leak/a.jpg", "https://images.test/[redacted]/[redacted]/a.jpg"],
+    ["https://images.test/a.jpg;jsessionid=must-not-leak", "https://images.test/a.jpg;jsessionid=[redacted]"],
+    ["https://images.test/a%3Bjsessionid%3Dmust-not-leak.jpg", "https://images.test/[redacted]"],
+    [`https://images.test/fetch/${encodeURIComponent("https://origin.test/a.jpg?token=must-not-leak")}`,
+      "https://images.test/fetch/[redacted]"],
+    [`https://images.test/fetch/${encodeURIComponent("https://origin.test/a.jpg?w=80")}`, null],
+    ["https://images.test/cdn-cgi/image/width=640,quality=75,sig=must-not-leak/a.jpg",
+      "https://images.test/cdn-cgi/image/[redacted]/a.jpg"],
+    ["https://images.test/cdn-cgi/image/width=640,quality=75,fit=cover/a.jpg", null],
+    [`https://lh3.googleusercontent.com/a/ACg8ocJ${"x".repeat(60)}=s96-c`, null],
+    ["https://lh3.googleusercontent.com/SHORTCAPABILITYTOKEN=w200-h200",
+      "https://lh3.googleusercontent.com/[redacted]"],
+    ["https://dthumb-phinf.pstatic.net/?src=%22https%3A%2F%2Fshop-phinf.pstatic.net%2F20240101_1%2Fabc.jpg%3Ftype%3Df300%22"
+      + "&type=f300", null],
+  ];
+  const hiddenMisses = hiddenCases.filter(([address, expected]) => redactImageAddress(address) !== (expected ?? address));
+  assert(hiddenMisses.length === 0 && hiddenCases.every(([address]) => !redactImageAddress(address).includes("must-not")),
+    `두 번 인코딩, 중첩 fragment, ';' 구분, 경로의 값이 credential을 가리지 않았거나 그림에 필요한 값을 바꿨다: ${
+      JSON.stringify(hiddenMisses.map(([address]) => redactImageAddress(address)))}`);
   port.axNodes = null;
 
   const artifactReady = await automation.observe(session, {

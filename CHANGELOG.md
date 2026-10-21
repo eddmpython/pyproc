@@ -12,6 +12,25 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Fixed
+
+- **Image address redaction.** A snapshot image's `url` no longer lets a credential through four gaps of 0.0.36. A
+  value is judged after percent-decoding it until it stops changing, so a signed address encoded twice inside a proxy's
+  `url` is redacted. An address inside a value is harmless only when its fragment is too (`#access_token=` redacts the
+  value). `;` separates parameters as `&` does (`?type=m510;token=...` keeps `type` and redacts `token`). The path keeps
+  its bytes except a segment that is a JSON Web Token, carries an address with a query, has a `;name=value` matrix
+  parameter, or holds `=` other than an image option list (`width=640,quality=75`) or a long image id with its size
+  (`<id>=s96-c`); that segment becomes `[redacted]`. A capability path whose unguessable id is the image's only name
+  keeps it. Gate: `test:contracts` (`browserAutomation`).
+
+### 한국어
+
+스냅숏 그림 노드의 `url`이 0.0.36에서 놓치던 네 경우를 가린다. 값은 더 풀리지 않을 때까지 퍼센트 디코딩한 뒤
+판정해, 프록시의 `url`에 두 번 인코딩해 담은 서명 주소도 가린다. 값 안의 주소는 fragment까지 무해해야 남는다.
+`;`도 `&`처럼 매개변수를 나눈다. 경로는 그대로 두되 JSON Web Token인 조각, query가 있는 주소를 담은 조각,
+`;name=value` 매개변수, 그림 옵션 목록이나 긴 그림 id와 크기가 아닌 `=` 조각은 `[redacted]`로 바꾼다. 추측할 수
+없는 id 자체가 그림의 이름인 경로는 그대로 둔다.
+
 ## 0.0.36 - 2026-10-21
 
 ### Added

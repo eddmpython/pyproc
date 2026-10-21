@@ -297,8 +297,15 @@ it loses its fragment. Only parameters known to be harmless for an image keep th
 value is not a JSON Web Token and any address it carries is harmless in the same way, and a nameless value of digits
 (a cache stamp). Every other value becomes `[redacted]`, because signed and session addresses name their credential in
 words no list of secret names finishes (`hmac`, `hdnts`, `__gda__`, `hm`, `oh`, `NID_AUT`, `X-Amz-Signature`); `h`
-and `s` are left out because some servers use them for a hash and a signature. An address that needs a redacted value
-to load no longer loads, and that is the intended trade. An inline `data:` image, an image without a source, a link's
+and `s` are left out because some servers use them for a hash and a signature. A value is judged after percent-decoding
+it until it stops changing, so an address encoded twice is judged by what it carries; an address inside a value is
+harmless only when its path, query and fragment are. `&` and `;` both separate parameters. The path keeps its bytes
+except a segment that is a JSON Web Token, carries an address with a query, has a `;name=value` matrix parameter
+(redacted unless an image parameter with a plain value), or holds `=` other than an image option list
+(`width=640,quality=75`) or a long image id with its size (googleusercontent's `<id>=s96-c`); such a segment becomes
+`[redacted]`. A path whose unguessable id is itself the access (a capability address) keeps that id, because it is the
+image's only name: the address shows that image to whoever reads it, as the page did. An address that needs a redacted
+value to load no longer loads, and that is the intended trade. An inline `data:` image, an image without a source, a link's
 destination, and an image button's source carry no `url`. The address comes from the accessibility tree the
 observation already reads, so no other browser method is called.
 
