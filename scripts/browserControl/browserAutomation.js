@@ -227,6 +227,28 @@ const HYDRATE_LAZY_FUNCTION = ({ maxScrolls, settleMs, timeoutMs }) => `(async (
   };
 })()`;
 
+// Chrome's Accessibility.getFullAXTree lists nodes breadth first, so one search result's title, summary, and link sit
+// hundreds of nodes apart and the first page of a long inventory is the page frame. I list them depth first from each
+// root along childIds, which is the order a reader meets them; a node no root reaches keeps its provider place at the end.
+function documentOrder(nodes, byId) {
+  const ordered = [];
+  const seen = new Set();
+  const visit = (root) => {
+    const stack = [root];
+    while (stack.length) {
+      const node = stack.pop();
+      if (seen.has(node.nodeId)) continue;
+      seen.add(node.nodeId);
+      ordered.push(node);
+      const children = (node.childIds || []).map((id) => byId.get(id)).filter(Boolean);
+      for (let index = children.length - 1; index >= 0; index -= 1) stack.push(children[index]);
+    }
+  };
+  for (const node of nodes) if (!node.parentId || !byId.has(node.parentId)) visit(node);
+  for (const node of nodes) if (!seen.has(node.nodeId)) visit(node);
+  return ordered;
+}
+
 function sameRect(left, right) {
   if (!left || !right) return false;
   return ["x", "y", "width", "height"].every((key) => Math.abs(Number(left[key]) - Number(right[key])) <= 0.25);
@@ -720,7 +742,7 @@ export class BrowserAutomation {
     const locatorRefs = new Set();
     for (const source of frameSources) {
       const rawNodeById = new Map(source.nodes.map((node) => [node.nodeId, node]));
-      for (const node of source.nodes) {
+      for (const node of documentOrder(source.nodes, rawNodeById)) {
         if (node.ignored) continue;
         const role = clipped(remoteValue(node.role));
         const name = clipped(remoteValue(node.name));

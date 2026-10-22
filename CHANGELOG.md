@@ -10,6 +10,14 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Added
 
+- **Document order in full observations.** A legacy observation lists accessibility nodes depth first along each root's
+  `childIds`, the order a reader meets them, instead of Chrome's breadth-first `Accessibility.getFullAXTree` order, so a
+  search result's title, summary and link come out together and the first page of a long inventory is no longer only
+  the page frame. A node no root reaches keeps its provider place at the end. Gate: `test:contracts` (`browserAutomation`).
+
+  한국어: 화면 읽기가 접근성 노드를 Chrome의 너비 우선 순서가 아니라 `childIds`를 따른 깊이 우선(읽는 순서)으로 낸다. 검색
+  결과 하나의 제목·요약·링크가 붙어 나오고, 긴 화면의 첫 묶음이 화면 틀만으로 채워지지 않는다.
+
 - **Link destinations in legacy observations.** A `link` node now carries `url`, where it goes, redacted like an
   image address (`redactLinkAddress`): only image parameters keep their value, plus a value of digits only under any
   name (an item, product or page number); every other query value becomes `[redacted]` and the fragment is dropped.

@@ -535,6 +535,26 @@ export async function assertBrowserAutomationContract() {
     && focused.result.nodes.some((node) => node.name === "Completion saved"),
   "interactive snapshot이 전체 AX tree에서 control과 live status text를 먼저 고르지 않았다");
 
+  // Chrome lists the full tree breadth first; a result's title and summary must come out next to each other.
+  const treeNode = (nodeId, name, childIds = [], parentId) => ({
+    nodeId, ...(parentId ? { parentId } : {}), backendDOMNodeId: 300 + nodeId.length + name.length, ignored: false,
+    role: { type: "role", value: name ? "link" : "generic" }, name: { type: "computedString", value: name }, childIds,
+  });
+  port.axNodes = [
+    treeNode("page", "", ["first", "second"]),
+    treeNode("first", "", ["firstTitle", "firstBody"], "page"),
+    treeNode("second", "", ["secondTitle"], "page"),
+    treeNode("firstTitle", "First title", [], "first"),
+    treeNode("firstBody", "", ["firstSummary"], "first"),
+    treeNode("secondTitle", "Second title", [], "second"),
+    treeNode("firstSummary", "First summary", [], "firstBody"),
+    treeNode("loose", "Unreached", [], "missing-parent"),
+  ];
+  const ordered = await automation.observe(session, { mode: "all", maxNodes: 50 });
+  assert(JSON.stringify(ordered.result.nodes.map((node) => node.name).filter(Boolean))
+    === JSON.stringify(["First title", "First summary", "Second title", "Unreached"]),
+  `full snapshot이 문서 순서(깊이 우선)로 node를 내지 않았다: ${ordered.result.nodes.map((node) => node.name)}`);
+
   // A thumbnail proxy names its original image in `src`; that address must survive byte for byte.
   const proxied = "https://thumbs.test/?src=%22https%3A%2F%2Fimages.test%2F20261021_1%2Fmain.jpg%3Ftype%3Dw860%22&type=f80_80";
   const axNode = (index, role, address, name = "") => ({
