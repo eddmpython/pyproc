@@ -12,6 +12,19 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **Pictures the accessibility tree leaves out.** Chrome drops an `<img alt="">` from `Accessibility.getFullAXTree`
+  entirely, so a full read of a shop's product page named no product photo. A full (`mode: "all"`) legacy observation now
+  also takes one `DOMSnapshot.captureSnapshot` of the root document and lists each `<img>` the tree did not name as an
+  `image` node with its `url` (the image address rule, a relative `src` resolved against the document) where a reader
+  meets it in document order, with a locator. An interactive read takes no snapshot. A full read is now two provider
+  commands. Gate: `test:contracts` (`browserAutomation`).
+
+  한국어: 대체 글이 빈 그림(`<img alt="">`)은 Chrome 접근성 트리에서 빠져 쇼핑 상품 화면의 상품 사진을 읽지 못했다. 전체 읽기는
+  루트 문서의 DOM 스냅숏 한 번으로 트리가 이름 붙이지 않은 그림을 문서 순서 자리에 `image` 줄과 `url`(그림 주소 규칙)로 넣는다.
+  상호작용 읽기는 스냅숏을 찍지 않는다. 전체 읽기는 provider 명령 두 번이다.
+
 ## 0.0.38 - 2026-10-23
 
 ### Added

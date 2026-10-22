@@ -139,6 +139,7 @@ class FakePort {
       };
     }
     if (command.method === "Accessibility.getFullAXTree" && this.axNodes) result = { nodes: this.axNodes };
+    if (command.method === "DOMSnapshot.captureSnapshot" && this.domSnapshot) result = this.domSnapshot;
     if (command.method === "DOM.getDocument") result = { root: { nodeId: 1 } };
     if (command.method === "DOM.querySelector") result = { nodeId: this.queryAttached ? 9 : 0 };
     if (command.method === "DOM.resolveNode") result = { object: { objectId: "remote:11" } };
@@ -428,10 +429,12 @@ export async function assertBrowserAutomationContract() {
   });
   const session = sessionRef();
   const observed = await automation.observe(session, { maxNodes: 10 });
-  assert(observed.kind === "snapshot" && observed.requestCount === 1,
-    "semantic snapshot이 관찰 command 한 번으로 끝나지 않았다");
+  // A full read is the accessibility tree and one DOM snapshot for the pictures the tree leaves out.
+  assert(observed.kind === "snapshot" && observed.requestCount === 2,
+    "semantic snapshot이 관찰 command 두 번(AX tree, DOM snapshot)으로 끝나지 않았다");
   assert(observed.trace?.schemaVersion === "1" && observed.trace.steps.length === 1
-    && observed.trace.steps[0].commands[0].method === "Accessibility.getFullAXTree",
+    && observed.trace.steps[0].commands[0].method === "Accessibility.getFullAXTree"
+    && observed.trace.steps[0].commands[1].method === "DOMSnapshot.captureSnapshot",
   "bounded trace가 observation command와 action 위치를 보존하지 않았다");
   assert(observed.result.nodes.length === 2 && observed.result.nodes.every((node) => node.locatorRef),
     "compact accessibility snapshot 또는 opaque locator가 어긋났다");
@@ -555,6 +558,39 @@ export async function assertBrowserAutomationContract() {
     === JSON.stringify(["First title", "First summary", "Second title", "Unreached"]),
   `full snapshot이 문서 순서(깊이 우선)로 node를 내지 않았다: ${ordered.result.nodes.map((node) => node.name)}`);
 
+  // Chrome leaves an <img alt=""> out of the tree; a full read names it from the DOM snapshot where a reader meets it,
+  // once, with the image address rule. An interactive read takes no snapshot.
+  const shot = "https://dthumb.test/?src=%22https%3A%2F%2Fshop.test%2F20261023_1%2Fmain.png%22&type=w860&token=abc";
+  port.axNodes = [
+    { nodeId: "p", backendDOMNodeId: 501, ignored: false, role: { type: "role", value: "generic" },
+      name: { type: "computedString", value: "" }, childIds: ["h", "t", "logo"] },
+    { nodeId: "h", parentId: "p", backendDOMNodeId: 502, ignored: false, role: { type: "role", value: "heading" },
+      name: { type: "computedString", value: "상품 정보" }, childIds: [] },
+    { nodeId: "t", parentId: "p", backendDOMNodeId: 504, ignored: false, role: { type: "role", value: "StaticText" },
+      name: { type: "computedString", value: "상세 정보" }, childIds: [] },
+    { nodeId: "logo", parentId: "p", backendDOMNodeId: 505, ignored: false, role: { type: "role", value: "image" },
+      name: { type: "computedString", value: "로고" }, childIds: [],
+      properties: [{ name: "url", value: { type: "string", value: "https://shop.test/logo.png" } }] },
+  ];
+  const strings = ["https://shop.test/products/1", "DIV", "H2", "IMG", "P", "src", "alt", "", shot, "/logo.png", "로고"];
+  port.domSnapshot = { strings, documents: [{ documentURL: 0, nodes: {
+    nodeName: [1, 2, 3, 4, 3], backendNodeId: [501, 502, 503, 504, 505],
+    attributes: [[], [], [5, 8, 6, 7], [], [5, 9, 6, 10]],
+  } }] };
+  const pictured = await automation.observe(session, { mode: "all", maxNodes: 50 });
+  const lines = pictured.result.nodes.map((node) => `${node.role}:${node.name || ""}:${node.url || ""}`);
+  assert(JSON.stringify(lines) === JSON.stringify([
+    "generic::", "heading:상품 정보:",
+    "image::https://dthumb.test/?src=%22https%3A%2F%2Fshop.test%2F20261023_1%2Fmain.png%22&type=w860&token=[redacted]",
+    "StaticText:상세 정보:", "image:로고:https://shop.test/logo.png",
+  ]) && pictured.result.nodes.every((node) => node.locatorRef),
+  `full snapshot이 tree 밖의 그림을 문서 순서에 한 번씩 넣지 않았다: ${lines.join(" | ")}`);
+  const snapshotsBefore = port.commands.filter((item) => item.command.method === "DOMSnapshot.captureSnapshot").length;
+  await automation.observe(session, { mode: "interactive", maxNodes: 50 });
+  assert(port.commands.filter((item) => item.command.method === "DOMSnapshot.captureSnapshot").length === snapshotsBefore,
+    "interactive snapshot이 DOM snapshot을 찍었다");
+  port.domSnapshot = null;
+
   // A thumbnail proxy names its original image in `src`; that address must survive byte for byte.
   const proxied = "https://thumbs.test/?src=%22https%3A%2F%2Fimages.test%2F20261021_1%2Fmain.jpg%3Ftype%3Dw860%22&type=f80_80";
   const axNode = (index, role, address, name = "") => ({
@@ -676,7 +712,7 @@ export async function assertBrowserAutomationContract() {
   });
   assert(artifactReady.result.screenshot?.mimeType === "image/png" && artifactReady.result.screenshot?.dataBase64
     && artifactReady.result.screenshot?.artifactRef?.startsWith("artifact:")
-    && artifactReady.requestCount === 6,
+    && artifactReady.requestCount === 7,
   "screenshot와 event domain(Runtime, Log, Network) 준비가 bounded observation으로 합쳐지지 않았다");
   port.emit("Runtime.consoleAPICalled", {
     type: "info", timestamp: 1, args: [{ value: "token=must-not-leak" }, { value: 42 }],

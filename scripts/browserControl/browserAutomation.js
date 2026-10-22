@@ -249,6 +249,41 @@ function documentOrder(nodes, byId) {
   return ordered;
 }
 
+// Pictures the accessibility tree leaves out. Chrome drops an <img alt=""> from Accessibility.getFullAXTree entirely (a
+// shop's product thumbnails are drawn that way), so a full read of a product page had no picture to name. A
+// DOMSnapshot of the root document lists every <img> with its src in document order; the ones the tree did not name
+// come back as { backendNodeId, domIndex, src, alt }. Nothing is clicked and no picture is loaded.
+function domImages(snapshot) {
+  const strings = snapshot?.strings || [];
+  const nodes = snapshot?.documents?.[0]?.nodes;
+  if (!nodes) return [];
+  const text = (index) => (Number.isInteger(index) && index >= 0 ? strings[index] ?? "" : "");
+  const found = [];
+  for (let index = 0; index < (nodes.nodeName || []).length; index += 1) {
+    if (text(nodes.nodeName[index]) !== "IMG") continue;
+    const pairs = nodes.attributes?.[index] || [];
+    const attributes = {};
+    for (let at = 0; at + 1 < pairs.length; at += 2) attributes[text(pairs[at]).toLowerCase()] = text(pairs[at + 1]);
+    const backendNodeId = nodes.backendNodeId?.[index];
+    if (!attributes.src || !Number.isInteger(backendNodeId)) continue;
+    let src = "";
+    try {
+      src = new URL(attributes.src, text(snapshot.documents[0].documentURL) || undefined).href;
+    } catch {
+      continue;
+    }
+    found.push({ backendNodeId, domIndex: index, src, alt: clipped(attributes.alt || "") });
+  }
+  return found;
+}
+
+// The DOM order index of every node of the root document that has a backend id (DOMSnapshot lists nodes in document
+// order), so an image the tree left out goes back where a reader meets it.
+function domOrder(snapshot) {
+  const ids = snapshot?.documents?.[0]?.nodes?.backendNodeId || [];
+  return new Map(ids.map((id, index) => [id, index]));
+}
+
 function sameRect(left, right) {
   if (!left || !right) return false;
   return ["x", "y", "width", "height"].every((key) => Math.abs(Number(left[key]) - Number(right[key])) <= 0.25);
@@ -738,9 +773,38 @@ export class BrowserAutomation {
     }
     const maxNodes = action.maxNodes || BROWSER_AUTOMATION_DEFAULT_MAX_NODES;
     const mode = action.mode || "all";
+    // A full read also names the pictures the accessibility tree left out (domImages). An interactive read does not
+    // list pictures, so it does not take the snapshot.
+    let snapshot = null;
+    if (mode === "all") {
+      const captured = await this._command(sessionRef, "DOMSnapshot.captureSnapshot", { computedStyles: [] },
+        commandResults, signal);
+      if (captured.contextEpoch !== command.contextEpoch) {
+        throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+          "browser document changed during observation", { outcome: "notSent", retryable: true });
+      }
+      snapshot = captured.result || null;
+      rawBytes += byteLength(snapshot || {});
+    }
     const eligibleNodes = [];
     const locatorRefs = new Set();
     for (const source of frameSources) {
+      const root = !source.framePath.length && !source.frame;
+      const named = new Set(source.nodes.filter((node) => !node.ignored).map((node) => node.backendDOMNodeId));
+      const order = root && snapshot ? domOrder(snapshot) : new Map();
+      const pictures = root && snapshot
+        ? domImages(snapshot).filter((image) => !named.has(image.backendNodeId))
+          .map((image) => ({ ...image, url: redactImageAddress(image.src) })).filter((image) => image.url)
+        : [];
+      const picture = (image) => {
+        const compact = { role: "image", url: image.url };
+        if (image.alt) compact.name = image.alt;
+        eligibleNodes.push({ node: { backendDOMNodeId: image.backendNodeId }, compact, rawNodeById: new Map(),
+          framePath: source.framePath, frame: source.frame });
+      };
+      const placeBefore = (domIndex) => {
+        while (pictures.length && (domIndex === undefined || pictures[0].domIndex < domIndex)) picture(pictures.shift());
+      };
       const rawNodeById = new Map(source.nodes.map((node) => [node.nodeId, node]));
       for (const node of documentOrder(source.nodes, rawNodeById)) {
         if (node.ignored) continue;
@@ -765,8 +829,11 @@ export class BrowserAutomation {
           if (propertyValue !== undefined) states[property.name] = propertyValue;
         }
         if (Object.keys(states).length) compact.states = Object.freeze(states);
+        const at = order.get(node.backendDOMNodeId);
+        if (at !== undefined) placeBefore(at);
         eligibleNodes.push({ node, compact, rawNodeById, framePath: source.framePath, frame: source.frame });
       }
+      placeBefore(undefined);
     }
     const liveText = ({ node, compact, rawNodeById }) => {
       if (!AX_TEXT_ROLES.has(compact.role)) return false;
