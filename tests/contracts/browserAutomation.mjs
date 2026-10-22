@@ -16,7 +16,11 @@ import {
 } from "../../scripts/browserControl/mcpBrowserControl.js";
 import { BROWSER_CONTROL_COMMAND_RISKS } from "../../scripts/browserControl/browserControlPolicy.js";
 import { NodeCdpTransport } from "../../scripts/browserControl/nodeCdpTransport.js";
-import { redactBrowserUrl, redactImageAddress } from "../../scripts/browserControl/browserObservation.js";
+import {
+  redactBrowserUrl,
+  redactImageAddress,
+  redactLinkAddress,
+} from "../../scripts/browserControl/browserObservation.js";
 import { BrowserArtifactStore } from "../../scripts/browserControl/browserArtifactStore.js";
 import { SemanticInventory } from "../../scripts/automationSpace/semanticInventory.js";
 import { BrowserSecretInput } from "../../scripts/browserControl/browserSecretInput.js";
@@ -552,6 +556,8 @@ export async function assertBrowserAutomationContract() {
     axNode(8, "image", null, "Decoration"),
     axNode(9, "link", "https://shop.test/p/1?aff=must-not-leak", "Product"),
     axNode(10, "button", "https://images.test/e.jpg", "Zoom"),
+    axNode(11, "link", "https://shop.test/vp/products/7012345678?itemId=17012345678&vendorItemId=84012345678"
+      + "&searchId=must-not-leak#a", "Item"),
   ];
   const imaged = await automation.observe(session, { mode: "all", maxNodes: 20 });
   assert(JSON.stringify(imaged.result.nodes.map((node) => node.url ?? null)) === JSON.stringify([
@@ -560,11 +566,19 @@ export async function assertBrowserAutomationContract() {
     "https://thumbs.test/?src=[redacted]&type=f80",
     "https://images.test/b.jpg?PHPSESSID=[redacted]&w=80",
     "https://images.test/c.jpg?v=[redacted]",
-    null, null, null, null, null, null,
+    null, null, null, null,
+    "https://shop.test/p/1?aff=[redacted]",
+    null,
+    "https://shop.test/vp/products/7012345678?itemId=17012345678&vendorItemId=84012345678&searchId=[redacted]",
   ]) && imaged.result.nodes.every((node) => node.locatorRef && !node.states?.url)
     && !JSON.stringify(imaged.result).includes("must-not-leak") && !JSON.stringify(imaged.result).includes("eyJ"),
   `image snapshot 주소가 원본 query를 보존하거나 credential을 가리지 않았다: ${JSON.stringify(
     imaged.result.nodes.map((node) => node.url ?? null))}`);
+  // A link keeps digit-only values under any name and is otherwise redacted like an image; a button never carries one.
+  assert(redactLinkAddress("https://shop.test/p?itemId=1&page=2&sig=AbCdEf&w=80") === "https://shop.test/p?itemId=1&page=2&sig=[redacted]&w=80"
+    && redactLinkAddress("https://shop.test/p?token=12345678") === "https://shop.test/p?token=12345678"
+    && redactImageAddress("https://shop.test/p.jpg?itemId=1") === "https://shop.test/p.jpg?itemId=[redacted]",
+    "link 주소의 숫자 값 보존 또는 그 밖의 가리기가 어긋났다");
   assert(redactImageAddress("https://images.test/f.jpg?eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3OCJ9.c2ln&w=1")
     === "https://images.test/f.jpg?[redacted]&w=1" && redactImageAddress("https://images.test/f.jpg?1699999999&w=1")
     === "https://images.test/f.jpg?1699999999&w=1" && redactImageAddress("https://images.test/f.jpg?AbCdSig&w=1")

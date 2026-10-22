@@ -310,9 +310,10 @@ except a segment that is a JSON Web Token, carries an address with a query, has 
 (`width=640,quality=75`) or a long image id with its size (googleusercontent's `<id>=s96-c`); such a segment becomes
 `[redacted]`. A path whose unguessable id is itself the access (a capability address) keeps that id, because it is the
 image's only name: the address shows that image to whoever reads it, as the page did. An address that needs a redacted
-value to load no longer loads, and that is the intended trade. An inline `data:` image, an image without a source, a link's
-destination, and an image button's source carry no `url`. The address comes from the accessibility tree the
-observation already reads, so no other browser method is called.
+value to load no longer loads, and that is the intended trade. A `link` node carries `url`, where it goes, under the
+same rule with one addition: a value of digits only (an item, product or page number) keeps its value under any name.
+An inline `data:` image, an image without a source, and an image button's source carry no `url`. The address comes
+from the accessibility tree the observation already reads, so no other browser method is called.
 
 A legacy observation returns at most 1,000 nodes per call. When more nodes belong to the captured snapshot,
 the result includes an opaque `continuationRef` and `inventory.complete` is false. Continue it with only the

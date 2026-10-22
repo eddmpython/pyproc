@@ -29,7 +29,7 @@ import {
   waitForBrowserActionability,
 } from "./browserActionability.js";
 import { InputStateGuard } from "./inputStateGuard.js";
-import { BrowserObservation, redactImageAddress } from "./browserObservation.js";
+import { BrowserObservation, redactImageAddress, redactLinkAddress } from "./browserObservation.js";
 import { BrowserTrace } from "./browserTrace.js";
 import { BrowserLifecycle } from "./browserLifecycle.js";
 import { BrowserDownload } from "./browserDownload.js";
@@ -83,9 +83,10 @@ const AX_CONTEXT_ROLES = new Set([
 const AX_LIVE_ROLES = new Set(["alert", "status"]);
 const AX_TEXT_ROLES = new Set(["InlineTextBox", "StaticText"]);
 // Roles whose AX `url` property is the image the element shows: Chromium reports it as the absolute address of the
-// source it chose (the picture source or srcset candidate, not only `src`). A link's or an image button's `url` is where
-// it goes, which is not copied.
+// source it chose (the picture source or srcset candidate, not only `src`). A link's `url` is where it goes and is
+// copied under the link rule (redactLinkAddress); an image button's `url` is not copied.
 const AX_IMAGE_ROLES = new Set(["image", "img"]);
+const AX_LINK_ROLES = new Set(["link"]);
 
 const TARGET_IDENTITY_FUNCTION = `function(other) {
   "use strict";
@@ -732,8 +733,9 @@ export class BrowserAutomation {
         if (description) compact.description = description;
         const states = {};
         for (const property of node.properties || []) {
-          if (property.name === "url" && AX_IMAGE_ROLES.has(role)) {
-            const address = redactImageAddress(remoteValue(property.value));
+          if (property.name === "url" && (AX_IMAGE_ROLES.has(role) || AX_LINK_ROLES.has(role))) {
+            const redact = AX_IMAGE_ROLES.has(role) ? redactImageAddress : redactLinkAddress;
+            const address = redact(remoteValue(property.value));
             if (address) compact.url = address;
           }
           if (!AX_STATES.has(property.name)) continue;

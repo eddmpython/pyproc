@@ -10,6 +10,14 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Added
 
+- **Link destinations in legacy observations.** A `link` node now carries `url`, where it goes, redacted like an
+  image address (`redactLinkAddress`): only image parameters keep their value, plus a value of digits only under any
+  name (an item, product or page number); every other query value becomes `[redacted]` and the fragment is dropped.
+  Image nodes are unchanged; a button still carries no `url`. Gate: `test:contracts` (`browserAutomation`).
+
+  한국어: 화면 읽기의 `link` 노드도 `url`(가는 곳)을 받는다. 그림 주소와 같은 규칙으로 가리되 숫자만인 값(상품·아이템·
+  쪽 번호)은 이름이 무엇이든 남기고, 그 밖의 query 값은 `[redacted]`다. 그림 노드는 그대로이고 버튼은 여전히 `url`이 없다.
+
 - **Persistent user data directory.** `browser.userDataDir` (`nativeCdp`, an absolute folder, not with `requests:
   "safe"`) is the isolated browser's `--user-data-dir` across sessions, so a signed-in account, cookies and site settings
   stay for the next session (an automation that needs an account can keep running on a private desktop). Chrome hands a

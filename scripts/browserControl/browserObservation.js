@@ -83,14 +83,21 @@ function fullyDecoded(text) {
 
 // A query split at `&` and `;` (both separate parameters on some servers), with the value of every parameter not known
 // to be harmless replaced by [redacted]. The separators and every kept parameter keep their exact bytes.
-function harmlessQuery(query, depth) {
+// `keeps` judges a named parameter (harmlessParameter for an image; a link also keeps a value of digits only).
+function harmlessQuery(query, depth, keeps = harmlessParameter) {
   return query.replace(/[^&;]+/g, (pair) => {
     const split = pair.indexOf("=");
     if (split < 0) return CACHE_STAMP.test(decodedComponent(pair)) ? pair : "[redacted]";
     const name = pair.slice(0, split);
-    return harmlessParameter(decodedComponent(name), decodedComponent(pair.slice(split + 1)), depth)
+    return keeps(decodedComponent(name), decodedComponent(pair.slice(split + 1)), depth)
       ? pair : `${name}=[redacted]`;
   });
+}
+
+// A link's parameter keeps its value as an image's does, and also when the value is digits only under any name (an
+// item, product or page number): such a value is the thing the link names, and grants nothing by itself.
+function linkParameter(name, value, depth) {
+  return harmlessParameter(name, value, depth) || CACHE_STAMP.test(fullyDecoded(value) ?? "");
 }
 
 // A parameter is harmless when its name is an image parameter, its value (decoded until it stops changing) is no token,
@@ -162,6 +169,16 @@ function redactedOption(option) {
 // `&` and `;` both separate parameters. The path keeps its bytes except a segment that carries a token, an address with
 // a query, or a session option (redactedSegment). Anything else returns null.
 export function redactImageAddress(value) {
+  return redactedAddress(value, harmlessParameter);
+}
+
+// A link's destination, under the image rule plus digit-only values (linkParameter): the path and the parameters
+// that name what the link opens stay, everything that could be a credential becomes [redacted].
+export function redactLinkAddress(value) {
+  return redactedAddress(value, linkParameter);
+}
+
+function redactedAddress(value, keeps) {
   if (typeof value !== "string" || !value || value.length > BROWSER_OBSERVATION_ADDRESS_LIMIT) return null;
   let parsed;
   try { parsed = new URL(value); }
@@ -172,7 +189,7 @@ export function redactImageAddress(value) {
   if (path !== parsed.pathname) parsed.pathname = path;
   const query = parsed.search.slice(1);
   if (query) {
-    const kept = harmlessQuery(query, 0);
+    const kept = harmlessQuery(query, 0, keeps);
     if (kept !== query) parsed.search = kept;
   }
   return parsed.href.length > BROWSER_OBSERVATION_ADDRESS_LIMIT ? null : parsed.href;
