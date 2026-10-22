@@ -11,7 +11,8 @@ export const MACHINE_PROFILE_RECIPES = Object.freeze([
 
 const INPUT_KEYS = new Set([
   "recipe", "engineRoot", "timeoutMs", "executable", "headed", "gpu",
-  "allowedOrigins", "actions", "methods", "fileRoots", "exportRoot", "trustedCertificates", "maxRisk", "externalEffects",
+  "allowedOrigins", "actions", "methods", "fileRoots", "exportRoot", "userDataDir", "trustedCertificates", "maxRisk",
+  "externalEffects",
   "purpose", "artifacts", "viewport", "recording", "executionMemory", "effectTransactions", "appSpace",
 ]);
 const BROWSER_INPUT_KEYS = Object.freeze([...INPUT_KEYS].filter((key) => ![
@@ -64,6 +65,7 @@ function commonBrowser(input, { provider, actions, maxRisk }) {
     methods: input.methods === undefined ? [] : input.methods,
     fileRoots: input.fileRoots === undefined ? [] : input.fileRoots,
     ...(input.exportRoot === undefined ? {} : { exportRoot: input.exportRoot }),
+    ...(input.userDataDir === undefined ? {} : { userDataDir: input.userDataDir }),
     externalEffects: input.externalEffects || "",
     purpose: input.purpose || "",
     ...(input.artifacts === undefined ? {} : { artifacts: input.artifacts }),
@@ -80,7 +82,7 @@ function assertPythonOnly(input) {
 }
 
 function observeLocalBrowser(input) {
-  for (const key of ["actions", "methods", "fileRoots", "exportRoot", "maxRisk", "recording"]) {
+  for (const key of ["actions", "methods", "fileRoots", "exportRoot", "userDataDir", "maxRisk", "recording"]) {
     if (input[key] !== undefined) throw new TypeError(`observeLocal does not accept ${key}`);
   }
   requireExplicitText(input.purpose, "observeLocal purpose");

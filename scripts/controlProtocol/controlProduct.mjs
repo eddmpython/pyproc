@@ -321,6 +321,9 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       machinePage?.launchUrl || "about:blank", {
       prefix: "pyprocControl-",
       cdpPipe: providerKind === "nativeCdp",
+      // The manifest's persistent user data directory (browser.userDataDir) keeps the isolated browser's state.
+      ...(providerKind === "nativeCdp" && env.PYPROC_BROWSER_USER_DATA_DIR
+        ? { userDataDir: env.PYPROC_BROWSER_USER_DATA_DIR } : {}),
       extraArgs: [...trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
         ...requestGuardLaunchArgs(browserConfig?.requests)],
       ...(preferences ? { preferences } : {}),

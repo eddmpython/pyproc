@@ -1,8 +1,9 @@
 // browserLauncher.mjs - 설치 제품과 browser gate가 공유하는 격리 Chromium process 수명주기.
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, unlinkSync, writeFileSync }
+  from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { BROWSER_DESKTOP_HELPER_FAILED, browserDesktopHelper, browserDesktopOf }
   from "./browserDesktop/browserDesktopHelper.mjs";
 
@@ -29,6 +30,54 @@ function removeBrowserProfile(profile) {
     lastError ? { cause: lastError } : undefined);
   error.code = "BROWSER_PROFILE_CLEANUP_FAILED";
   throw error;
+}
+
+// The lock a session leaves in a persistent user data directory while it owns it, and the failure a second session gets.
+export const BROWSER_USER_DATA_LOCK = "pyprocUserData.lock";
+export const BROWSER_USER_DATA_IN_USE = "BROWSER_USER_DATA_IN_USE";
+
+function processRuns(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch (error) { return error?.code === "EPERM"; }
+}
+
+/** Prepare a persistent user data directory for the browser (`--user-data-dir`). The browser keeps its own state there
+ *  across sessions: cookies, signed-in accounts, site settings. Chrome lets one running instance own such a directory and a
+ *  second launch hands itself to the first and exits, so a lock file naming the owning process is written there and a
+ *  second session fails with `BROWSER_USER_DATA_IN_USE` while that process runs; a lock a dead process left is replaced.
+ *  First preferences are written only for a directory that has none yet, so an existing profile's settings are never
+ *  overwritten. `release()` removes the lock and keeps the directory. */
+export function prepareBrowserUserData({ userDataDir, preferences = null } = {}) {
+  if (typeof userDataDir !== "string" || !isAbsolute(userDataDir)) {
+    throw new TypeError("userDataDir must be an absolute folder path");
+  }
+  mkdirSync(userDataDir, { recursive: true });
+  const lock = join(userDataDir, BROWSER_USER_DATA_LOCK);
+  let fd;
+  try { fd = openSync(lock, "wx"); }
+  catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    let holder = NaN;
+    try { holder = Number(readFileSync(lock, "utf8").trim()); } catch { holder = NaN; }
+    if (holder !== process.pid && processRuns(holder)) {
+      const busy = new Error(`the browser user data directory is in use by process ${holder}: ${userDataDir}`);
+      busy.code = BROWSER_USER_DATA_IN_USE;
+      throw busy;
+    }
+    unlinkSync(lock);
+    fd = openSync(lock, "wx");
+  }
+  writeFileSync(fd, String(process.pid));
+  closeSync(fd);
+  const preferencesFile = join(userDataDir, "Default", "Preferences");
+  if (preferences && !existsSync(preferencesFile)) {
+    mkdirSync(join(userDataDir, "Default"), { recursive: true });
+    writeFileSync(preferencesFile, JSON.stringify(preferences));
+  }
+  return Object.freeze({
+    dir: userDataDir,
+    release() { try { unlinkSync(lock); } catch (error) { if (error?.code !== "ENOENT") throw error; } },
+  });
 }
 
 export function findBrowser({ executable = process.env.PYPROC_BROWSER || "" } = {}) {
@@ -113,16 +162,23 @@ export function launchBrowser(url, opts = {}) {
   // take the user's foreground or keyboard; a tree kill of the helper ends the browser.
   const desktop = browserDesktopOf(opts);
   const helper = desktop === "private" ? browserDesktopHelper() : null;
+  // The scratch folder (the broker's downloads and artifacts) is always temporary and removed at close. The browser's own
+  // state lives there too, unless `userDataDir` names a persistent directory of its own (prepareBrowserUserData).
   const profile = mkdtempSync(join(opts.profileRoot || tmpdir(), opts.prefix || "pyprocBrowser-"));
-  // 새 profile의 첫 설정은 브라우저가 뜨기 전에 써야 첫 페이지부터 적용된다.
-  if (preferences) {
+  let userData = null;
+  if (opts.userDataDir !== undefined && opts.userDataDir !== null) {
+    try { userData = prepareBrowserUserData({ userDataDir: opts.userDataDir, preferences }); }
+    catch (error) { removeBrowserProfile(profile); throw error; }
+  } else if (preferences) {
+    // 새 profile의 첫 설정은 브라우저가 뜨기 전에 써야 첫 페이지부터 적용된다.
     mkdirSync(join(profile, "Default"), { recursive: true });
     writeFileSync(join(profile, "Default", "Preferences"), JSON.stringify(preferences));
   }
+  const dataDir = userData ? userData.dir : profile;
   // cdpPipe: CDP를 loopback port가 아니라 브라우저 fd 3(읽기)과 fd 4(쓰기) pipe로 연다. 부모 쪽에서는
   // stdio[3]에 쓰고 stdio[4]에서 읽는다. listener가 없으므로 이 브라우저에 붙을 수 있는 것은 이 프로세스뿐이다.
   const pipeArgs = opts.cdpPipe === true ? ["--remote-debugging-pipe"] : [];
-  const launchArgs = [...browserLaunchArgs(profile, opts), ...pipeArgs, ...extraArgs, url];
+  const launchArgs = [...browserLaunchArgs(dataDir, opts), ...pipeArgs, ...extraArgs, url];
   // The helper says on standard error why it could not start the browser; nothing else is kept from it.
   const errorOut = helper ? "pipe" : "ignore";
   const proc = spawn(helper || browser, helper ? [browser, ...launchArgs] : launchArgs, {
@@ -151,6 +207,7 @@ export function launchBrowser(url, opts = {}) {
     browser,
     desktop,
     profile,
+    userDataDir: userData ? userData.dir : null,
     proc,
     cdpPipe: opts.cdpPipe === true ? Object.freeze({ write: proc.stdio[3], read: proc.stdio[4] }) : null,
     exited: () => exitInfo,
@@ -159,6 +216,8 @@ export function launchBrowser(url, opts = {}) {
       if (closed) return;
       killBrowserProcess(proc, profile);
       removeBrowserProfile(profile);
+      // A persistent directory is kept; strays that still name it are ended and its lock is released.
+      if (userData) { killBrowserProcess(null, userData.dir); userData.release(); }
       closed = true;
     },
   });

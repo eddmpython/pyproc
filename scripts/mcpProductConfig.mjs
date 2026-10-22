@@ -16,7 +16,8 @@ import {
 const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "replayGraph", "actuation", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
-  "enabled", "provider", "executable", "headed", "desktop", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
+  "enabled", "provider", "executable", "headed", "desktop", "userDataDir", "gpu", "allowedOrigins", "maxRisk", "actions",
+  "methods",
   "fileRoots", "exportRoot", "externalEffects", "purpose", "artifacts", "viewport",
   "recording", "trustedCertificates", "requests", "blockedHosts", "blockedDomains", "userBrowser", "userBrowserProfile",
   "permissionRevision",
@@ -235,7 +236,7 @@ function normalizedBrowser(input = { enabled: false }) {
       || !/^[A-Za-z0-9-]{1,64}$/.test(browser.userBrowserProfile))) {
       throw new TypeError("browser.userBrowserProfile must be a profileId reported by user-browser status");
     }
-    for (const key of ["executable", "headed", "desktop", "gpu", "trustedCertificates"]) {
+    for (const key of ["executable", "headed", "desktop", "userDataDir", "gpu", "trustedCertificates"]) {
       if (browser[key] !== undefined) throw new TypeError(`browser.provider userBrowser does not accept browser.${key}`);
     }
   } else if (browser.userBrowser !== undefined || browser.userBrowserProfile !== undefined) {
@@ -282,6 +283,18 @@ function normalizedBrowser(input = { enabled: false }) {
     }
     exportRoot = resolve(browser.exportRoot);
   }
+  // A persistent user data directory keeps the isolated browser's own state (signed-in accounts, cookies) across
+  // sessions; the manifest names it and only the launched browser takes it. A read-only session writes its guard into a
+  // fresh profile's first preferences and keeps nothing, so it has no persistent directory.
+  let userDataDir = null;
+  if (browser.userDataDir !== undefined) {
+    if (typeof browser.userDataDir !== "string" || !isAbsolute(browser.userDataDir)) {
+      throw new TypeError("browser.userDataDir must be an absolute folder path");
+    }
+    if (provider !== "nativeCdp") throw new TypeError("browser.userDataDir is for the nativeCdp provider");
+    if (requests === "safe") throw new TypeError("browser.userDataDir does not combine with browser.requests safe");
+    userDataDir = resolve(browser.userDataDir);
+  }
   const normalized = {
     enabled: true,
     provider,
@@ -301,6 +314,7 @@ function normalizedBrowser(input = { enabled: false }) {
     methods: browser.methods === undefined ? [] : stringArray(browser.methods, "browser.methods"),
     fileRoots: browser.fileRoots === undefined ? [] : stringArray(browser.fileRoots, "browser.fileRoots"),
     ...(exportRoot === null ? {} : { exportRoot }),
+    ...(userDataDir === null ? {} : { userDataDir }),
     externalEffects: browser.externalEffects || "",
     purpose,
     artifacts,
@@ -563,6 +577,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   env.PYPROC_BROWSER_METHODS = browser.methods.join(",");
   env.PYPROC_BROWSER_FILE_ROOTS = browser.fileRoots.join(delimiter);
   if (browser.exportRoot) env.PYPROC_BROWSER_EXPORT_ROOT = browser.exportRoot;
+  if (browser.userDataDir) env.PYPROC_BROWSER_USER_DATA_DIR = browser.userDataDir;
   if (browser.externalEffects) env.PYPROC_BROWSER_EXTERNAL_EFFECTS = browser.externalEffects;
   if (browser.purpose) env.PYPROC_BROWSER_PURPOSE = browser.purpose;
   if (browser.viewport) env.PYPROC_BROWSER_VIEWPORT = JSON.stringify(browser.viewport);

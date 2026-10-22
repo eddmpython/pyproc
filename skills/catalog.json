@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:77503e1124d43140a39ae256320d316f1d82991660618628d11f23a8fd2bfd52",
-  "catalogDigest": "sha256:c3e3cedb68a70650405e555a8d171f091cb5a31b6b2ba2f5aa4151442cc9e1e9",
+  "generatedFromDigest": "sha256:ec08f2378ef2b0cca6a166c77386ce69c758c89b96b786d8dd093ae6b01fdfac",
+  "catalogDigest": "sha256:bd638bcce6b8b6215ebb92c94f4e5e0fecf4e68d3da03e4416829f126ddb7c07",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -260,8 +260,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
-      "bytes": 48085,
-      "sha256": "sha256:e5083e5edd5449afc4b55d1bae3b2ada330563d8c842a59d75585c3c769706d8"
+      "bytes": 49066,
+      "sha256": "sha256:14963bcd3ce12984402f2cb96d903a81d1f623a8ce6c0c043e078f74ec5c035b"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/frame-space.md",

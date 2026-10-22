@@ -138,6 +138,7 @@ and incomplete external-effect approval fail closed.
 | `browser.viewport` | Optional strict `{width,height,deviceScaleFactor?,mobile?,touch?}` device metrics. Dimensions are 1 to 10000 and scale is 0.1 to 10 |
 | `browser.fileRoots` | Existing absolute upload roots. Required when upload is enabled |
 | `browser.exportRoot` | Optional absolute folder (`nativeCdp` or `userBrowser`) that each declared click download is also written into, as a new file the receipt names. Created when the first download is written. Never widened at runtime |
+| `browser.userDataDir` | Optional absolute folder (`nativeCdp`, not with `requests: "safe"`) the browser keeps its own state in across sessions: signed-in accounts, cookies, site settings. Without it the browser starts from a fresh temporary profile that is removed at close. One running session owns the folder at a time: a second session on it fails with `BROWSER_USER_DATA_IN_USE` until the first closes (the lock file `pyprocUserData.lock` names the owning process; one a dead process left is replaced). Downloads and artifacts still land in the temporary scratch folder, and first preferences are written only into a folder that has none yet |
 | `browser.trustedCertificates` | Optional `{origin,certificate,spkiSha256?}` list for self-signed local HTTPS targets. Each origin is an exact loopback HTTPS origin in `allowedOrigins`, and the absolute PEM certificate must name its host and be inside its validity period. Only its public key is trusted |
 | `browser.requests` | `any` by default. `safe` makes a read-only session, only in a browser-only host (`engine.enabled: false`) with the `nativeCdp` provider: the browser itself refuses every request other than GET, HEAD, and OPTIONS, every WebSocket and WebTransport, and every download, from pages, frames, closing tabs, and workers |
 | `browser.blockedHosts` | Optional list of at most 64 exact host names (no scheme, port, path, or pattern; a subdomain is a different host) the session never reaches, with either request mode, `nativeCdp` or `userBrowser` provider. The browser refuses every request whose host is one of them before it is sent: a navigation, each redirect hop, a subresource, a frame, a new tab, a worker. Never changed by a permission revision |
@@ -213,6 +214,10 @@ machine page (unless engine is disabled) + Node CDP broker
   v
 broker-owned temporary Chrome or Edge profile
 ```
+
+With `browser.userDataDir` the browser's own state (its `--user-data-dir`) is that persistent folder instead of the
+scratch, while downloads and artifacts stay in the scratch; a person who signs in there once stays signed in for later
+sessions, which is how an automation that needs an account keeps running on a private desktop.
 
 A headed browser on the user's desktop is a real window there: when it starts, Chrome and Edge activate it even
 while the user types in another program (the Windows foreground lock does not stop them), so keys meant for that
