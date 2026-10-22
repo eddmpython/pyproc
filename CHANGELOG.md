@@ -8,6 +8,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+## 0.0.38 - 2026-10-23
+
 ### Added
 
 - **Document order in full observations.** A legacy observation lists accessibility nodes depth first along each root's
