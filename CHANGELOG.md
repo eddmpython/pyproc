@@ -8,6 +8,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+<!-- unreleased-subpaths: -->
+소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
+예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
+
 ## 0.0.38 - 2026-10-23
 
 ### Added
@@ -40,10 +44,6 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   로그인·쿠키·사이트 설정을 세션 사이에 남기는 영구 폴더를 둔다. 같은 폴더를 두 번 열면 Chrome이 두 번째를 첫 번째에
   넘기고 끝나므로 한 세션만 그 폴더를 쥐고(`pyprocUserData.lock`, 두 번째는 `BROWSER_USER_DATA_IN_USE`), 다운로드·
   산출물은 그대로 임시 폴더에 둔다.
-
-<!-- unreleased-subpaths: -->
-소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
-예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
 ## 0.0.37 - 2026-10-21
 
