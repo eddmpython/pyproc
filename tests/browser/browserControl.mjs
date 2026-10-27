@@ -662,19 +662,21 @@ try {
       { kind: "check", locator: { by: "role", value: "checkbox", name: "Receive updates" }, expectedRisk: "externalEffect" },
       { kind: "uncheck", locator: { by: "role", value: "checkbox", name: "Receive updates" }, expectedRisk: "externalEffect" },
       { kind: "upload", locator: { by: "testId", value: "upload-field" }, files: [join(ROOT, "LICENSE")], expectedRisk: "externalEffect" },
+      { kind: "upload", selector: "#hidden-upload-action", files: [join(ROOT, "LICENSE")], expectedRisk: "externalEffect" },
     ],
   }));
   const controlState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
     expression: "window.browserControlFixture.actionability()", returnByValue: true,
   }, "externalEffect"));
-  check("hover, focus, check, uncheck, upload가 trusted input과 filesystem guard 아래 동작",
-    controlActions.actions?.length === 5 && controlState.result?.result?.value?.counts.hover === 1
+  check("hover, focus, check, uncheck, upload가 trusted input과 filesystem guard 아래 동작(숨은 파일 칸 포함)",
+    controlActions.actions?.length === 6 && controlState.result?.result?.value?.counts.hover === 1
       && controlState.result.result.value.trusted.hover === true
       && controlActions.actions[1]?.result?.focused === true
       && controlState.result.result.value.counts.check === 2
       && controlState.result.result.value.trusted.check === true
       && controlState.result.result.value.checked === false
-      && controlState.result.result.value.files?.[0] === "LICENSE",
+      && controlState.result.result.value.files?.[0] === "LICENSE"
+      && controlState.result.result.value.hiddenFiles?.[0] === "LICENSE",
   JSON.stringify(controlState.result?.result?.value));
 
   const dialogAction = toolText(await callTool("browserAct", {

@@ -12,6 +12,16 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Changed
+
+- **Upload into a hidden file input.** A page usually hides its `<input type="file">` behind a styled button, so an
+  `upload` action stopped at actionability with `hidden` and a site's upload screen could not take a file. Setting
+  files needs no pointer, so `upload` now only requires the input to be attached and enabled; the files still have to
+  sit inside `browser.fileRoots`. Gate: `test:browser-control`.
+
+  한국어: 화면은 보통 파일 칸(`<input type="file">`)을 꾸민 단추 뒤에 숨겨 `upload`가 `hidden`으로 멈췄다. 파일 넣기는
+  포인터가 필요 없어 `upload`는 칸이 붙어 있고 켜져 있기만 보면 된다. 파일은 그대로 `browser.fileRoots` 안이어야 한다.
+
 ## 0.0.39 - 2026-10-23
 
 ### Added

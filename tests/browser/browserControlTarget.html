@@ -48,6 +48,7 @@
       <button id="hover-action" type="button" data-testid="hover-action">Hover action</button>
       <label><input id="check-action" type="checkbox"> Receive updates</label>
       <input id="upload-action" type="file" data-testid="upload-field">
+      <input id="hidden-upload-action" type="file" data-testid="hidden-upload-field" style="display: none">
       <button id="dialog-action" type="button">Confirm action</button>
       <button id="download-action" type="button">Download action</button>
       <button id="popup-action" type="button">Open allowed popup</button>
@@ -228,6 +229,7 @@
         focused: document.activeElement?.id || null,
         checked: document.getElementById("check-action").checked,
         files: Array.from(document.getElementById("upload-action").files || [], (file) => file.name),
+        hiddenFiles: Array.from(document.getElementById("hidden-upload-action").files || [], (file) => file.name),
         dialogDecision,
       }),
       observeArtifacts: async () => {

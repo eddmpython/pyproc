@@ -162,7 +162,9 @@ const REQUIREMENTS = Object.freeze({
   select: Object.freeze({ visible: true, stable: true, enabled: true }),
   scroll: Object.freeze({ visible: true }),
   uncheck: Object.freeze({ visible: true, stable: true, enabled: true, receivesEvents: true }),
-  upload: Object.freeze({ visible: true, stable: true, enabled: true }),
+  // A page usually hides its file input behind a styled button; setting files needs no pointer, so the input only has
+  // to be attached and enabled (the files themselves stay inside the authorized roots).
+  upload: Object.freeze({ enabled: true }),
 });
 
 function delay(ms, signal) {
