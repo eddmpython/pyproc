@@ -27,7 +27,7 @@ one supported JavaScript API.
 Install the exact npm version and prepare the pinned engine distribution.
 
 ```sh
-npm install --save-exact pyproc@0.0.39
+npm install --save-exact pyproc@0.0.40
 npm install pyproc@<exact-version>
 ```
 
