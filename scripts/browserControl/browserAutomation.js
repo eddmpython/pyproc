@@ -174,7 +174,8 @@ const CHECKED_FUNCTION = `function() {
 const UPLOAD_STATE_FUNCTION = `function() {
   "use strict";
   if (!this || this.tagName !== "INPUT" || this.type !== "file") throw new Error("browser upload target is not a file input");
-  return { files: Array.from(this.files || [], (file) => ({ name: file.name, size: file.size, type: file.type })) };
+  return { files: Array.from(this.files || [], (file) => ({ name: file.name, size: file.size, type: file.type })),
+    visibility: this.ownerDocument.visibilityState };
 }`;
 
 const HYDRATE_LAZY_FUNCTION = ({ maxScrolls, settleMs, timeoutMs }) => `(async () => {

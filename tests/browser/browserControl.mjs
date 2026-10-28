@@ -678,6 +678,10 @@ try {
       && controlState.result.result.value.files?.[0] === "LICENSE"
       && controlState.result.result.value.hiddenFiles?.[0] === "LICENSE",
   JSON.stringify(controlState.result?.result?.value));
+  const uploaded = controlActions.actions?.[4]?.result;
+  check("upload 결과는 페이지가 받은 파일(이름·크기)과 그때 페이지가 보였는지를 돌려줌",
+    uploaded?.files?.[0]?.name === "LICENSE" && uploaded.files[0].size > 0 && uploaded.visibility === "visible",
+  JSON.stringify(uploaded));
 
   const dialogAction = toolText(await callTool("browserAct", {
     sessionRef,

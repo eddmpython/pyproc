@@ -12,6 +12,22 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Fixed
+
+- **A controlled page keeps running while its window is hidden.** The user's browser opens a task window
+  unfocused, and the user may cover or minimize it; Chromium then reports the page hidden, stops its frames, and
+  never loads a video chosen in a file input there, so a site's video upload screen waited forever (images still
+  went in). Every attached session now turns on focus emulation, so the page stays shown and focused without
+  raising its window over the user's. A browser that refuses it keeps the session as before.
+- **`upload` says what the page received.** The action's result names each file the input now holds (name, size,
+  type) and the page's `visibility` at that moment, so a caller can tell a file the page never got from a page that
+  stalled. Gates: `test:user-browser`, `test:browser-control`.
+
+  한국어: 사용자 브라우저는 작업 창을 포커스 없이 열고 사용자가 그 창을 가리거나 최소화하기도 한다. 그러면 Chromium은
+  페이지를 숨은 것으로 보고 프레임을 멈추며 파일 칸에 넣은 영상을 읽지 않아, 사이트의 영상 올리기 화면이 끝없이
+  기다렸다(그림은 들어갔다). 이제 붙은 세션마다 focus emulation을 켜서 사용자의 창 위로 올리지 않고도 페이지가 보이고
+  포커스가 있는 채로 돈다. `upload` 결과는 칸에 들어간 파일(이름, 크기, 형식)과 그때 페이지가 보였는지(`visibility`)를 돌려준다.
+
 ## 0.0.40 - 2026-10-28
 
 ### Changed

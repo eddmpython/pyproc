@@ -297,6 +297,18 @@ async function journey({ kind, product, executable }, installed, app) {
   check(`${label}Motor in the user's browser sends one effect and closes with semantic plus network proof`,
     executed.output.terminal === "confirmed" && executed.output.receipt.effectWindow.providerCalls === 1
       && effects === effectsBefore + 1, JSON.stringify({ terminal: executed.output.terminal, effects }));
+  // The task window opens unfocused and the user may cover or minimize it; its page still has to run (a hidden page
+  // never loads a video chosen in a file input).
+  const taskTarget = (await direct.send("Target.getTargets")).targetInfos.find((info) => info.url.startsWith(`${origin}/fixture`));
+  const { windowId } = await direct.send("Browser.getWindowForTarget", { targetId: taskTarget.targetId });
+  await direct.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "minimized" } });
+  const minimized = await client.command(task.sessionRef, "Runtime.evaluate", {
+    expression: "({ visibility: document.visibilityState, focused: document.hasFocus() })", returnByValue: true,
+  }, { expectedRisk: "externalEffect" });
+  await direct.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
+  check(`${label}a task tab whose window is minimized still runs as a shown, focused page`,
+    minimized.output?.result?.result?.value?.visibility === "visible" && minimized.output.result.result.value.focused === true,
+    JSON.stringify(minimized.output?.result?.result?.value));
   const shot = await client.act(task.sessionRef, [{ kind: "screenshot", format: "png", expectedRisk: "read" }]);
   check(`${label}a screenshot of the task tab comes back as a PNG attachment`,
     shot.attachments.some((attachment) => attachment.mimeType === "image/png" && attachment.byteLength > 1000));

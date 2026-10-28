@@ -447,6 +447,10 @@ Storage get/set/remove/clear.
 activates and a form submits; navigation and editing control keys such as `Tab`, `Escape`, and the arrows
 carry no text.
 
+`upload` sets files on an attached, enabled file input (a hidden one too) from inside `browser.fileRoots`. Its result
+names each file the input now holds (`name`, `size`, `type`) and the page's `visibility` then. An attached page stays
+shown and focused even when its window is covered or minimized, so a site can read a chosen video there.
+
 `screenshot` is an ordered read action. A pipeline can fill and click, capture the resulting page, continue
 with another effect, and capture again without a client-side race. Supported options are:
 

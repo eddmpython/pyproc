@@ -87,6 +87,7 @@ export class NodeBrowserControlBroker {
     const sessionRef = await this.port.attach(targetRef);
     try {
       if (this._viewport) await this.port.applyViewport(sessionRef, this._viewport);
+      await this.port.keepShown(sessionRef);
       return sessionRef;
     } catch (error) {
       await Promise.allSettled([this.port.detach(sessionRef)]);

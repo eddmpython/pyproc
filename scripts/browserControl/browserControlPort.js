@@ -659,6 +659,22 @@ export class BrowserControlPort {
     return viewport;
   }
 
+  // A task window the browser opened unfocused, or one the user covers or minimizes, is hidden to its page: the
+  // browser stops its frames and never loads a video chosen in a file input there. Focus emulation keeps the
+  // controlled page shown and focused without raising its window over the user's. A browser that refuses it keeps
+  // the session as before; the answer says whether it took.
+  async keepShown(sessionRef) {
+    this._requireOpen();
+    const session = this._requireSession(sessionRef);
+    try {
+      await this._transport.send(session.transportSession,
+        { method: "Emulation.setFocusEmulationEnabled", params: { enabled: true } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async detach(sessionRef) {
     const session = this._requireSession(sessionRef);
     for (const [captureRef, capture] of this._popupCaptures) {
