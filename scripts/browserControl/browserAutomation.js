@@ -70,7 +70,7 @@ const MAX_REPORTED_REQUEST_IDS = 16;
 const TEXT_LIMIT = 500;
 const STORAGE_VALUE_LIMIT = 10000;
 const AX_STATES = new Set([
-  "checked", "disabled", "expanded", "focused", "level", "pressed", "readonly", "required", "selected",
+  "checked", "disabled", "editable", "expanded", "focused", "level", "pressed", "readonly", "required", "selected",
 ]);
 const AX_INTERACTIVE_ROLES = new Set([
   "button", "checkbox", "combobox", "gridcell", "link", "listbox", "menuitem", "menuitemcheckbox",
@@ -292,6 +292,56 @@ function domImages(snapshot) {
 function domOrder(snapshot) {
   const ids = snapshot?.documents?.[0]?.nodes?.backendNodeId || [];
   return new Map(ids.map((id, index) => [id, index]));
+}
+
+// A fill on an observed text node selects its immediate element's contents. Read that exact range from the same
+// DOM snapshot, without climbing to the editor or treating an accessibility text run as the whole range.
+function domFillTargets(snapshot, editableNodes) {
+  const targets = new Map();
+  const strings = snapshot?.strings || [];
+  const text = (index) => (Number.isInteger(index) && index >= 0 ? strings[index] ?? "" : "");
+  for (const document of snapshot?.documents || []) {
+    const nodes = document.nodes;
+    if (!nodes) continue;
+    const size = nodes.nodeType?.length || 0;
+    const contents = Array(size).fill("");
+    const lengths = new Float64Array(size);
+    const elements = new Uint32Array(size);
+    const shadow = new Uint8Array(size);
+    for (const index of nodes.shadowRootType?.index || []) shadow[index] = 1;
+    for (let index = size - 1; index >= 0; index -= 1) {
+      if (nodes.nodeType[index] === 3 || nodes.nodeType[index] === 4) {
+        const value = text(nodes.nodeValue?.[index]);
+        contents[index] = value.slice(0, TEXT_LIMIT);
+        lengths[index] = value.length;
+      }
+      const parent = nodes.parentIndex?.[index];
+      if (!Number.isInteger(parent) || parent < 0 || parent >= index) continue;
+      // Snapshot includes shadow/template trees and child documents. Their text is not the host's textContent.
+      if (nodes.nodeType[index] === 11 || nodes.nodeType[index] === 9) continue;
+      shadow[parent] ||= shadow[index];
+      contents[parent] = (contents[index] + contents[parent]).slice(0, TEXT_LIMIT);
+      lengths[parent] += lengths[index];
+      elements[parent] += elements[index] + (nodes.nodeType[index] === 1 ? 1 : 0);
+    }
+    for (let index = 0; index < size; index += 1) {
+      const backendNodeId = nodes.backendNodeId?.[index];
+      if (!editableNodes.has(backendNodeId)) continue;
+      const at = nodes.nodeType[index] === 3 ? nodes.parentIndex?.[index] : index;
+      if (!Number.isInteger(at) || nodes.nodeType[at] !== 1) continue;
+      // Shadow trees are flattened by this snapshot. Do not present their host's range as exact DOM contents.
+      if (shadow[at]) continue;
+      const tag = text(nodes.nodeName?.[at]).toLowerCase();
+      const valueField = tag === "input" || tag === "textarea";
+      targets.set(backendNodeId, Object.freeze({
+        fillTag: tag,
+        fillScope: valueField ? "value" : "elementContents",
+        ...(!valueField ? { fillText: contents[at], fillTextStatus: lengths[at] <= TEXT_LIMIT ? "complete" : "truncated",
+          fillElements: elements[at] } : {}),
+      }));
+    }
+  }
+  return targets;
 }
 
 function sameRect(left, right) {
@@ -796,6 +846,10 @@ export class BrowserAutomation {
       snapshot = captured.result || null;
       rawBytes += byteLength(snapshot || {});
     }
+    const editableNodes = new Set(frameSources.filter((source) => !source.frame).flatMap((source) =>
+      source.nodes.filter((node) => node.properties?.some((property) =>
+        property.name === "editable" && remoteValue(property.value))).map((node) => node.backendDOMNodeId)));
+    const fillTargets = domFillTargets(snapshot, editableNodes);
     const eligibleNodes = [];
     const locatorRefs = new Set();
     for (const source of frameSources) {
@@ -837,6 +891,9 @@ export class BrowserAutomation {
           if (!AX_STATES.has(property.name)) continue;
           const propertyValue = remoteValue(property.value);
           if (propertyValue !== undefined) states[property.name] = propertyValue;
+        }
+        if (states.editable && !source.frame && fillTargets.has(node.backendDOMNodeId)) {
+          Object.assign(states, fillTargets.get(node.backendDOMNodeId));
         }
         if (Object.keys(states).length) compact.states = Object.freeze(states);
         const at = order.get(node.backendDOMNodeId);

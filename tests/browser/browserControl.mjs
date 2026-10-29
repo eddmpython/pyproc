@@ -347,6 +347,36 @@ try {
 
   const paragraphTextLocator = sameFrameObserved.result?.nodes
     ?.find((node) => node.role === "StaticText" && node.name === "Replace this paragraph")?.locatorRef;
+  const paragraphNode = sameFrameObserved.result?.nodes?.find((node) =>
+    node.role === "StaticText" && node.name === "Replace this paragraph");
+  const editorNode = sameFrameObserved.result?.nodes?.find((node) => node.name === "Article editor");
+  check("관찰한 문단의 실제 fill 요소와 글 범위가 편집기 전체와 구별됨",
+    paragraphNode?.states?.editable === "richtext" && paragraphNode.states.fillTag === "span"
+      && paragraphNode.states.fillScope === "elementContents"
+      && paragraphNode.states.fillText === "Replace this paragraph"
+      && paragraphNode.states.fillTextStatus === "complete" && paragraphNode.states.fillElements === 0
+      && editorNode?.states?.fillTag === "div" && editorNode.states.fillElements > 0
+      && editorNode.states.fillText.includes("Keep the next paragraph"), JSON.stringify(paragraphNode?.states));
+  const mixedNode = sameFrameObserved.result?.nodes?.find((node) =>
+    node.role === "StaticText" && node.name?.trim() === "Left");
+  const longNode = sameFrameObserved.result?.nodes?.find((node) =>
+    node.role === "StaticText" && node.name?.startsWith("Long range "));
+  const fixedNode = sameFrameObserved.result?.nodes?.find((node) => node.name === "Read-only range text");
+  check("문단의 다른 글자와 요소까지 실제 바뀔 범위에 포함하고 잘린 글은 구별",
+    mixedNode?.states?.fillTag === "p" && mixedNode.states.fillText === "Left middle right"
+      && mixedNode.states.fillElements === 1 && mixedNode.states.fillTextStatus === "complete"
+      && longNode?.states?.fillText.length === 500 && longNode.states.fillTextStatus === "truncated"
+      && fixedNode && !fixedNode.states?.fillScope, JSON.stringify({ mixed: mixedNode?.states, long: longNode?.states }));
+  const frameParagraph = sameFrameObserved.result?.nodes?.find((node) =>
+    node.role === "StaticText" && node.name === "Frame paragraph");
+  const nativeTitle = sameFrameObserved.result?.nodes?.find((node) => node.role === "textbox" && node.name === "Title");
+  const shadowEditor = sameFrameObserved.result?.nodes?.find((node) => node.name === "Shadow range editor");
+  check("입력 값과 같은 process 문단 범위를 구분하고 shadow 범위를 단정하지 않음",
+    nativeTitle?.states?.fillTag === "input" && nativeTitle.states.fillScope === "value"
+      && !Object.hasOwn(nativeTitle.states, "fillText")
+      && frameParagraph?.states?.fillTag === "p" && frameParagraph.states.fillText === "Frame paragraph"
+      && shadowEditor?.states?.editable === "richtext" && !shadowEditor.states.fillScope,
+  JSON.stringify({ native: nativeTitle?.states, frame: frameParagraph?.states, shadow: shadowEditor?.states }));
   check("관찰한 문단 글자에 opaque locator가 있음", !!paragraphTextLocator);
   if (paragraphTextLocator) {
     const paragraphAction = toolText(await callTool("browserAct", {

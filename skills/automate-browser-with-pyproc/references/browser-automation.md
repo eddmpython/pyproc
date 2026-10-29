@@ -576,6 +576,20 @@ the observed text's document and frame checks and the same visibility, hit targe
 A removed text node is stale; resolution never climbs to the enclosing editor. For `fill`, the immediate
 element's contents are selected, preserving adjacent elements, images, and embedded cards.
 
+The legacy semantic snapshot preserves Chromium's `states.editable` (`plaintext` or `richtext`). A full read
+(`mode: "all"`) also describes the resolved fill target in `states`: `fillTag` names its tag and `fillScope`
+is `value` for an input or textarea, or `elementContents` for an editable element. For `elementContents`,
+`fillText` previews that element's DOM text content, including other text runs in the same element, up to
+500 characters. `fillTextStatus` is `complete` or `truncated`; only `complete` describes the whole text.
+`fillElements` counts descendant elements inside that range, including pictures or links with no text.
+An input or textarea uses its existing accessibility `value`; it has no `fillText` preview.
+
+These details apply to that snapshot's opaque locator, not to another selector or a later page state.
+They are omitted for interactive reads, separately hosted frames, and flattened shadow trees whose DOM
+range this snapshot cannot prove. Missing details never prove a single-paragraph range. Before filling,
+read the intended paragraph and match both the complete text and the elements inside its range; do not
+mistake a text run's accessible name for everything the fill will replace. Observe again after an edit.
+
 `browserObserve` uses `mode: "all"` by default for compatibility. Use `mode: "interactive"` on large product
 pages when the next step is an action. This mode scans the full accessibility tree, selects controls,
 landmarks, live regions, and live-region text, and only then applies the per-page `maxNodes`. The result reports `mode`,

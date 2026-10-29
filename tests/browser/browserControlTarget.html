@@ -59,7 +59,7 @@
       <button class="strict-duplicate" type="button">Strict duplicate</button>
       <div id="semantic-shadow"></div>
       <iframe id="semantic-frame" title="semantic frame"
-        srcdoc="<!doctype html><button id='frame-action' type='button'>Frame action</button>"></iframe>
+        srcdoc="<!doctype html><button id='frame-action' type='button'>Frame action</button><p contenteditable='true'>Frame paragraph</p>"></iframe>
       <iframe id="cross-origin-frame" title="cross origin frame"></iframe>
     </section>
     <section aria-label="Late editor fixture">
@@ -69,6 +69,12 @@
         <figure contenteditable="false"><img alt="Preserved picture" width="8" height="8" src="/browserControlThumb"></figure>
         <a href="#preserved-video" contenteditable="false">Preserved video</a>
       </div>
+      <div contenteditable="true" role="textbox" aria-label="Range editor">
+        <p>Left <strong>middle</strong> right</p>
+        <p id="long-range"></p>
+        <span contenteditable="false">Read-only range text</span>
+      </div>
+      <div id="shadow-range" contenteditable="true" role="textbox" aria-label="Shadow range editor">Light range text</div>
       <div id="late-editor-noise"></div>
       <div id="structured-editor" contenteditable="true" role="textbox" aria-label="Structured code editor">starter</div>
       <output id="structured-editor-state">starter:false</output>
@@ -109,6 +115,9 @@
     const structuredEditor = document.getElementById("structured-editor");
     const structuredEditorState = document.getElementById("structured-editor-state");
     const paragraphEditor = document.getElementById("paragraph-editor");
+    document.getElementById("long-range").textContent = "Long range ".repeat(80);
+    document.getElementById("shadow-range").attachShadow({ mode: "open" }).innerHTML
+      = "<span>Shadow range text</span><slot></slot>";
     let paragraphClicked = false;
     let paragraphTrusted = false;
     paragraphEditor.addEventListener("click", (event) => { paragraphClicked = event.isTrusted; });
