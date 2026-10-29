@@ -571,6 +571,11 @@ cross-origin frame chains. Closed shadow roots are unsupported. Effects wait for
 visibility, stable geometry, enabled or editable state, viewport position, and hit target before the first
 effect command.
 
+An opaque locator for accessibility text resolves to that text node's immediate parent element. It keeps
+the observed text's document and frame checks and the same visibility, hit target, and send-boundary checks.
+A removed text node is stale; resolution never climbs to the enclosing editor. For `fill`, the immediate
+element's contents are selected, preserving adjacent elements, images, and embedded cards.
+
 `browserObserve` uses `mode: "all"` by default for compatibility. Use `mode: "interactive"` on large product
 pages when the next step is an action. This mode scans the full accessibility tree, selects controls,
 landmarks, live regions, and live-region text, and only then applies the per-page `maxNodes`. The result reports `mode`,
@@ -580,9 +585,12 @@ traversal state. It keeps opaque `locatorRef` values for immediate actions. A la
 session's locator set, so finish actions derived from one snapshot before observing again.
 
 `fill` uses the native value setter for `input` and `textarea`. For contenteditable editors it focuses and
-selects the current document content, then sends trusted browser text input so controlled editors update
+selects the target element's contents, then sends trusted browser text input so controlled editors update
 their application state instead of only changing displayed DOM text. A contenteditable result reports
 `inputMode: "trusted"` and the resulting visible value.
+If trusted input removes the target element (for example, Chromium unwraps an inline span), the applied
+result reports `targetDetached: true` and `value: null` instead of a retryable pre-input failure. Observe
+the editor again to verify its content and obtain fresh locators before the next edit.
 
 `waitFor` accepts the same three target forms and the states `attached`, `detached`, `visible`, `hidden`,
 `enabled`, `disabled`, `editable`, and `stable`. It uses fixed internal read-only resolver scripts rather than

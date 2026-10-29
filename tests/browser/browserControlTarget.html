@@ -63,6 +63,12 @@
       <iframe id="cross-origin-frame" title="cross origin frame"></iframe>
     </section>
     <section aria-label="Late editor fixture">
+      <div id="paragraph-editor" contenteditable="true" role="textbox" aria-label="Article editor">
+        <p><span id="paragraph-text">Replace this paragraph</span></p>
+        <p>Keep the next paragraph</p>
+        <figure contenteditable="false"><img alt="Preserved picture" width="8" height="8" src="/browserControlThumb"></figure>
+        <a href="#preserved-video" contenteditable="false">Preserved video</a>
+      </div>
       <div id="late-editor-noise"></div>
       <div id="structured-editor" contenteditable="true" role="textbox" aria-label="Structured code editor">starter</div>
       <output id="structured-editor-state">starter:false</output>
@@ -102,6 +108,11 @@
     const formStatus = document.getElementById("form-status");
     const structuredEditor = document.getElementById("structured-editor");
     const structuredEditorState = document.getElementById("structured-editor-state");
+    const paragraphEditor = document.getElementById("paragraph-editor");
+    let paragraphClicked = false;
+    let paragraphTrusted = false;
+    paragraphEditor.addEventListener("click", (event) => { paragraphClicked = event.isTrusted; });
+    paragraphEditor.addEventListener("input", (event) => { paragraphTrusted = event.isTrusted; });
     document.getElementById("late-editor-noise").replaceChildren(...Array.from({ length: 120 }, (_, index) => {
       const node = document.createElement("span");
       node.textContent = `late editor context ${index} `;
@@ -219,6 +230,10 @@
         applied: document.getElementById("applied")?.textContent || null,
       }),
       structuredEditor: () => ({ draft: structuredDraft, trusted: structuredTrusted }),
+      paragraphEditor: () => ({ clicked: paragraphClicked, trusted: paragraphTrusted,
+        paragraphs: Array.from(paragraphEditor.querySelectorAll("p"), (node) => node.textContent),
+        picture: paragraphEditor.querySelector("img")?.alt,
+        video: paragraphEditor.querySelector("a")?.getAttribute("href") }),
       keyActivations: () => keyActivations,
       resetActionability,
       actionability: () => ({

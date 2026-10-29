@@ -341,9 +341,42 @@ try {
     imageUrl("Lazy product asset") === `${targetOrigin}/tests/browser/browserControlLazy.svg`
       && imageUrl("Proxied product thumbnail") === `${targetOrigin}/browserControlThumb`
         + "?src=%22https%3A%2F%2Fimages.test%2Fmain.jpg%22&type=f80_80&token=[redacted]"
-      && !sameFrameObserved.result.nodes.some((node) => node.role !== "image" && node.url)
+      && !sameFrameObserved.result.nodes.some((node) => !["image", "link"].includes(node.role) && node.url)
       && !JSON.stringify(sameFrameObserved.result.nodes).includes("must-redact"),
   imageNodes.map((node) => `${node.name}=${node.url}`).join(" | "));
+
+  const paragraphTextLocator = sameFrameObserved.result?.nodes
+    ?.find((node) => node.role === "StaticText" && node.name === "Replace this paragraph")?.locatorRef;
+  check("관찰한 문단 글자에 opaque locator가 있음", !!paragraphTextLocator);
+  if (paragraphTextLocator) {
+    const paragraphAction = toolText(await callTool("browserAct", {
+      sessionRef,
+      actions: [
+        { kind: "click", locatorRef: paragraphTextLocator, timeoutMs: 1000, expectedRisk: "externalEffect" },
+        { kind: "fill", locatorRef: paragraphTextLocator, value: "Updated paragraph", expectedRisk: "externalEffect" },
+      ],
+    }));
+    const paragraphState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+      expression: "window.browserControlFixture.paragraphEditor()", returnByValue: true,
+    }, "externalEffect")).result?.result?.value;
+    check("문단의 글자 ref를 클릭하고 trusted 입력으로 그 문단만 수정",
+      paragraphAction.state === "completed" && paragraphState?.clicked === true
+        && paragraphState?.trusted === true && paragraphState?.paragraphs?.[0] === "Updated paragraph",
+    JSON.stringify({ code: paragraphAction.code, message: paragraphAction.message, paragraphState }));
+    check("글자 ref 편집이 이웃 문단과 그림·영상 링크를 보존",
+      paragraphState?.paragraphs?.[1] === "Keep the next paragraph"
+        && paragraphState?.picture === "Preserved picture" && paragraphState?.video === "#preserved-video");
+    check("trusted 입력으로 inline 요소가 사라져도 적용한 입력을 재시도 오류로 바꾸지 않음",
+      paragraphAction.actions?.[1]?.result?.targetDetached === true
+        && paragraphAction.actions[1].result.value === null);
+    const removedText = toolText(await callTool("browserAct", { sessionRef, actions: [
+      { kind: "fill", locatorRef: paragraphTextLocator, value: "Must not replace the editor",
+        timeoutMs: 250, expectedRisk: "externalEffect" },
+    ] }));
+    check("지워진 글자 ref를 편집기 전체로 넓히지 않고 전송 전에 거절",
+      removedText.code === "BROWSER_AUTOMATION_STALE_LOCATOR" && removedText.outcome === "notSent"
+        && removedText.completed?.length === 0, removedText.code);
+  }
 
   const interactiveObserved = toolText(await callTool("browserObserve", {
     sessionRef,
@@ -541,7 +574,7 @@ try {
     sessionRef, expectedRisk: "read", maxNodes: 1000,
   }));
   const frameLocator = frameObserved.result?.nodes?.find((node) =>
-    node.role === "button" && node.name === "Frame action")?.locatorRef;
+    node.role === "StaticText" && node.name === "Frame action")?.locatorRef;
   const frameClicked = frameLocator ? toolText(await callTool("browserAct", {
     sessionRef,
     actions: [{ kind: "click", locatorRef: frameLocator, expectedRisk: "externalEffect" }],
@@ -549,7 +582,7 @@ try {
   const frameClickedState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
     expression: "window.browserControlFixture.actionability()", returnByValue: true,
   }, "externalEffect"));
-  check("frame snapshot의 opaque locator가 같은 frame의 trusted click을 보냄",
+  check("frame snapshot의 글자 locator가 같은 frame의 trusted click을 보냄",
     frameClicked?.actions?.[0]?.result?.trusted === true
       && frameClickedState.result?.result?.value?.counts?.frame === 3,
   JSON.stringify({ action: frameClicked?.actions?.[0]?.result || null,
@@ -610,7 +643,7 @@ try {
   const oopifObserved = toolText(await callTool("browserObserve", {
     sessionRef, expectedRisk: "read", maxNodes: 1000,
   }));
-  const oopifLocator = oopifObserved.result?.nodes?.find((node) => node.role === "button"
+  const oopifLocator = oopifObserved.result?.nodes?.find((node) => node.role === "StaticText"
     && node.name === "Cross frame action")?.locatorRef;
   check("별도 process의 허용된 iframe 본문을 관찰",
     oopifObserved.result?.framesComplete === true

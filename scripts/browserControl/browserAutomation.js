@@ -93,6 +93,11 @@ const TARGET_IDENTITY_FUNCTION = `function(other) {
   return !!this && this === other;
 }`;
 
+const TEXT_ELEMENT_FUNCTION = `function() {
+  "use strict";
+  return this.nodeType === 3 && this.isConnected ? this.parentElement : null;
+}`;
+
 const SECRET_FIELD_FUNCTION = `function(origin, field) {
   return !!this && this.isConnected && this.ownerDocument.defaultView.location.origin === origin
     && this.tagName === "INPUT" && (field === "password" ? this.type === "password"
@@ -131,7 +136,11 @@ const FILL_FUNCTION = `function(value, origin, field) {
 
 const CONTENTEDITABLE_FILL_RESULT_FUNCTION = `function() {
   "use strict";
-  if (!this || this.nodeType !== 1 || !this.isContentEditable) throw new Error("browser fill target is not editable");
+  if (!this || this.nodeType !== 1) throw new Error("browser fill target is not an Element");
+  if (!this.isConnected) {
+    return { tag: this.tagName.toLowerCase(), value: null, inputMode: "trusted", targetDetached: true };
+  }
+  if (!this.isContentEditable) throw new Error("browser fill target is not editable");
   this.dispatchEvent(new Event("change", { bubbles: true }));
   return { tag: this.tagName.toLowerCase(), value: String(this.textContent || ""), inputMode: "trusted" };
 }`;
@@ -1848,7 +1857,8 @@ export class BrowserAutomation {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
         "browser locator belongs to a replaced document", { outcome: "notSent", retryable: true });
     }
-    const objectId = resolved.result?.object?.objectId;
+    const objectId = await this._resolveLocatorElement(sessionRef, resolved,
+      commandResults, signal, trustedRead);
     if (!objectId) {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.targetMissing,
         "browser locator target is unavailable", { outcome: "notSent", retryable: true });
@@ -1884,10 +1894,33 @@ export class BrowserAutomation {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
         "browser separate frame target changed", { outcome: "notSent", retryable: true });
     }
-    return Object.freeze({ objectId: resolved.result.object.objectId, description: locatorRef,
+    const objectId = await this._resolveLocatorElement(sessionRef, resolved,
+      commandResults, signal, trustedRead, route);
+    return Object.freeze({ objectId, description: locatorRef,
       contextEpoch: resolved.contextEpoch, frameId: frame.id, frame: route,
       frameChain: Object.freeze([Object.freeze({ frameId: frame.id,
         ownerBackendNodeId: owner.result.backendNodeId })]) });
+  }
+
+  async _resolveLocatorElement(sessionRef, resolved, commandResults, signal, trustedRead, frame = null) {
+    const node = resolved.result?.object;
+    if (node?.className !== "Text" || !node.objectId) return node?.objectId;
+    let element;
+    try {
+      element = await this._sendCommand(sessionRef, "Runtime.callFunctionOn", {
+        objectId: node.objectId, functionDeclaration: TEXT_ELEMENT_FUNCTION, returnByValue: false,
+      }, commandResults, signal, trustedRead, frame);
+    } finally {
+      await this._releaseTarget(sessionRef, { objectId: node.objectId, frame },
+        commandResults, signal, trustedRead);
+    }
+    const objectId = element.result?.result?.objectId;
+    if (element.contextEpoch !== resolved.contextEpoch || !objectId) {
+      if (objectId) await this._releaseTarget(sessionRef, { objectId, frame }, commandResults, signal, trustedRead);
+      throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+        "browser text locator no longer has its connected element", { outcome: "notSent", retryable: true });
+    }
+    return objectId;
   }
 
   async _releaseTarget(sessionRef, target, commandResults, signal, trustedRead = false) {
