@@ -12,6 +12,21 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.42 - 2026-10-30
+
+### Fixed
+
+- **Observed text refs target their connected element.** Browser actions resolve a text node to its immediate
+  parent element in the same frame, so an editable paragraph can be focused, clicked, and filled. A successful
+  trusted fill still reports its applied result when the editor replaces the target element during input.
+- **Full observations describe the exact fill range.** Editable nodes report the target tag and whether a fill
+  changes a field value or element contents. Element contents include their text, truncation status, and descendant
+  element count. Shadow ranges that cannot be established from the snapshot are left undescribed.
+
+  한국어: 관찰한 글자 ref를 같은 프레임의 직계 요소로 연결해 문단을 누르고 고칠 수 있다. 입력 중 편집기가
+  요소를 교체해도 이미 적용한 결과를 잃지 않는다. 전체 관찰에는 편집할 요소의 태그와 바뀔 범위, 전체 글의
+  잘림 여부와 내부 요소 수를 표시한다. 스냅숏으로 범위를 확인할 수 없는 shadow 요소는 확인한 것처럼 표시하지 않는다.
+
 ## 0.0.41 - 2026-10-28
 
 ### Fixed
