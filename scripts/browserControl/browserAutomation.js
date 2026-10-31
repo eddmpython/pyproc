@@ -431,8 +431,27 @@ function summarizeCommands(commandResults) {
   });
 }
 
+// US 자판에서 글자 하나를 치는 키(code와 Windows 키 번호)다. Shift로 치는 글자는 그 아래 글자의 키를 쓴다. 키 번호를
+// 글자 번호로 대신하면 '.'(46)이 Delete, '('(40)가 아래 화살표처럼 Chromium의 편집 명령이 되어 그 글자를 버린다.
+const PRINTED_KEYS = (() => {
+  const keys = new Map();
+  const place = (characters, code, windowsVirtualKeyCode) => {
+    for (const character of characters) keys.set(character, Object.freeze({ code, windowsVirtualKeyCode }));
+  };
+  for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+    place(letter + letter.toLowerCase(), `Key${letter}`, letter.codePointAt(0));
+  }
+  [..."0123456789"].forEach((digit, index) => place(digit + ")!@#$%^&*("[index], `Digit${digit}`, digit.codePointAt(0)));
+  for (const [characters, code, windowsVirtualKeyCode] of [
+    [" ", "Space", 32], ["`~", "Backquote", 192], ["-_", "Minus", 189], ["=+", "Equal", 187],
+    ["[{", "BracketLeft", 219], ["]}", "BracketRight", 221], ["\\|", "Backslash", 220], [";:", "Semicolon", 186],
+    ["'\"", "Quote", 222], [",<", "Comma", 188], [".>", "Period", 190], ["/?", "Slash", 191],
+  ]) place(characters, code, windowsVirtualKeyCode);
+  return keys;
+})();
+
 // text가 있는 키만 keypress와 기본 활성화를 만든다. Enter와 Space는 사람의 키처럼 활성화하고(단추 click, form
-// submit), 이동과 편집 제어 키는 문자를 넣지 않는다.
+// submit), 이동과 편집 제어 키는 문자를 넣지 않는다. 자판에 없는 글자(한글 등)는 키 번호 0으로 글자만 넣는다.
 function keyDefinition(key) {
   const named = {
     Backspace: { code: "Backspace", windowsVirtualKeyCode: 8 },
@@ -450,15 +469,8 @@ function keyDefinition(key) {
   };
   if (Object.hasOwn(named, key)) return { key: key === "Space" ? " " : key, ...named[key] };
   if (key.length === 1) {
-    const upper = key.toUpperCase();
-    const letter = /^[A-Z]$/.test(upper);
-    const digit = /^[0-9]$/.test(key);
-    return {
-      key,
-      code: letter ? `Key${upper}` : digit ? `Digit${key}` : "",
-      text: key,
-      windowsVirtualKeyCode: upper.codePointAt(0),
-    };
+    const printed = PRINTED_KEYS.get(key);
+    return { key, code: printed?.code ?? "", text: key, windowsVirtualKeyCode: printed?.windowsVirtualKeyCode ?? 0 };
   }
   return { key, code: key };
 }

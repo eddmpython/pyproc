@@ -12,6 +12,18 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Fixed
+
+- **A pressed character keeps its own key code.** A one-character `press` sent the character's code point as its
+  Windows key code, so `.` went as Delete, `(` as ArrowDown, `%` as ArrowLeft and `#` as End; Chromium ran that
+  editing command and dropped the character. Printable characters now carry the code and key code of their key on
+  the US keyboard (shifted characters use their base key), and characters off that keyboard, such as Hangul, carry
+  key code 0 and insert only their text. Gates: `test:contracts`, `test:browser-control`.
+
+  한국어: 글자 하나를 press하면 글자 번호를 Windows 키 번호로 실어 `.`이 Delete, `(`가 아래 화살표, `%`가 왼쪽
+  화살표, `#`가 End로 갔고 Chromium이 그 편집 명령을 하며 글자를 버렸다. 이제 글자마다 US 자판에서 그 글자가 놓인
+  키의 code와 키 번호를 싣고(Shift로 치는 글자는 아래 글자의 키), 한글처럼 자판에 없는 글자는 키 번호 0으로 글자만 넣는다.
+
 ## 0.0.42 - 2026-10-30
 
 ### Fixed

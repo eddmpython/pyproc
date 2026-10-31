@@ -783,6 +783,16 @@ export async function assertBrowserAutomationContract() {
   assert(enterDown?.text === "\r" && enterDown.unmodifiedText === "\r"
     && ["Tab", "Escape"].every((key) => keyDowns(key).at(-1) && keyDowns(key).at(-1).text === undefined),
   "press Enter가 활성화 text를 싣지 않았거나 제어 키가 문자를 실었다");
+  // 글자 키는 US 자판의 그 키 번호를 싣는다. 글자 번호를 싣으면 '.'(46)이 Delete, '('(40)가 아래 화살표가 되어
+  // Chromium이 편집 명령을 하고 그 글자를 버린다(소비 저장소의 유튜브 댓글에 dongap.com이 dongapcom으로 들어간 실측).
+  const printed = [[".", "Period", 190], ["(", "Digit9", 57], ["%", "Digit5", 53], ["'", "Quote", 222],
+    ["-", "Minus", 189], ["?", "Slash", 191], ["k", "KeyK", 75], ["7", "Digit7", 55], ["세", "", 0]];
+  await automation.run(session, printed.map(([key]) => ({ kind: "press", key, expectedRisk: "externalEffect" })));
+  const printedMiss = printed.filter(([key, code, windowsVirtualKeyCode]) => {
+    const down = keyDowns(key).at(-1);
+    return down?.text !== key || down.code !== code || down.windowsVirtualKeyCode !== windowsVirtualKeyCode;
+  });
+  assert(printedMiss.length === 0, `글자 키가 자판의 키 번호를 싣지 않았다: ${JSON.stringify(printedMiss)}`);
   assert(audit.some((record) => record.kind === "click" && record.state === "applied"),
     "external action 감사 이벤트가 없다");
 

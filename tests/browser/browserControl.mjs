@@ -482,6 +482,21 @@ try {
   ] }));
   check("초점을 둔 native 단추를 Enter와 Space가 사람의 키처럼 trusted click으로 활성화",
     afterEnter === 1 && await keyActivations() === 2, `${afterEnter}`);
+  // 글자 키가 글자 번호를 키 번호로 실으면 Chromium이 '.'(Delete), '('(아래 화살표), '#'(End)를 편집 명령으로 읽고
+  // 글자를 버린다(소비 저장소의 유튜브 댓글에 dongap.com이 dongapcom으로 들어간 실측).
+  const typedText = "세트 dongap.com/tree?set=(fish-73) 50% #1 $2 & 'a' \"b\" ! ·°";
+  const typedPresses = [...typedText].map((character) => ({
+    kind: "press", key: character === " " ? "Space" : character, expectedRisk: "externalEffect" }));
+  toolText(await callTool("browserAct", { sessionRef, actions: [
+    { kind: "fill", locatorRef: interactiveTitleLocator, value: "", expectedRisk: "externalEffect" },
+  ] }));
+  for (let start = 0; start < typedPresses.length; start += 16) {
+    toolText(await callTool("browserAct", { sessionRef, actions: typedPresses.slice(start, start + 16) }));
+  }
+  const typedState = toolText(await browserCommand(sessionRef, "Runtime.evaluate",
+    { expression: "window.browserControlFixture.form()", returnByValue: true }, "externalEffect"));
+  check("한 글자씩 press한 글이 문장 부호와 한글까지 칸에 그대로 들어감",
+    typedState.result?.result?.value?.title === typedText, JSON.stringify(typedState.result?.result?.value?.title));
 
   const resetActionability = async (kind) => browserCommand(sessionRef, "Runtime.evaluate", {
     expression: `window.browserControlFixture.resetActionability(${JSON.stringify(kind)})`,
