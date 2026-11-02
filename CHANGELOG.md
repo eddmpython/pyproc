@@ -23,6 +23,19 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   한국어: 글자 하나를 press하면 글자 번호를 Windows 키 번호로 실어 `.`이 Delete, `(`가 아래 화살표, `%`가 왼쪽
   화살표, `#`가 End로 갔고 Chromium이 그 편집 명령을 하며 글자를 버렸다. 이제 글자마다 US 자판에서 그 글자가 놓인
   키의 code와 키 번호를 싣고(Shift로 치는 글자는 아래 글자의 키), 한글처럼 자판에 없는 글자는 키 번호 0으로 글자만 넣는다.
+- **Frame elements stay actionable after the outer page scrolls.** The parent-frame hit test for an element inside
+  an iframe sent top viewport coordinates to `DOM.getNodeForLocation`, which hit-tests in top document coordinates.
+  Once the outer page had scrolled, the check looked at the wrong place or found no node and the action was rejected.
+  The hit test now adds the top document scroll offset read from `Page.getLayoutMetrics`, and a frame element whose
+  point lies outside the top viewport is scrolled into view before input. `Page.getLayoutMetrics` joins the trusted
+  read and target resolution methods; the policy already classified it as a read. Gates: `test:browser-control`,
+  `test:frame-space`, `test:contracts`.
+
+  한국어: iframe 안 요소를 다룰 때 바깥 화면에서 그 점을 맞히는 검사가 바깥 화면 좌표를 `DOM.getNodeForLocation`에
+  보냈는데, 이 명령은 바깥 문서 좌표로 찾는다. 그래서 바깥 화면을 내린 뒤에는 엉뚱한 곳을 보거나 아무 요소도 찾지
+  못해 동작이 거부됐다. 이제 `Page.getLayoutMetrics`로 읽은 바깥 문서의 스크롤 거리를 더해 찾고, 점이 바깥 화면
+  밖에 있는 frame 안 요소는 화면 안으로 내린 뒤 입력한다. `Page.getLayoutMetrics`를 신뢰 읽기와 대상 찾기 명령에
+  더했다(정책은 이미 읽기로 분류한다).
 
 ## 0.0.42 - 2026-10-30
 

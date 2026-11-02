@@ -56,7 +56,7 @@ const TARGET_PROPERTIES = Object.freeze({
 
 const TARGET_RESOLUTION_METHODS = Object.freeze([
   "Page.getFrameTree", "Page.createIsolatedWorld", "DOM.getFrameOwner", "DOM.getBoxModel", "DOM.getNodeForLocation",
-  "DOM.resolveNode", "Runtime.evaluate", "Runtime.callFunctionOn", "Runtime.releaseObject",
+  "Page.getLayoutMetrics", "DOM.resolveNode", "Runtime.evaluate", "Runtime.callFunctionOn", "Runtime.releaseObject",
 ]);
 const TRUSTED_POINTER_METHODS = Object.freeze([...TARGET_RESOLUTION_METHODS, "Input.dispatchMouseEvent"]);
 const TRUSTED_DRAG_METHODS = Object.freeze([

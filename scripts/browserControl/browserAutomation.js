@@ -1775,19 +1775,37 @@ export class BrowserAutomation {
     const final = frameChain.at(-1);
     const point = status.topTranslated ? status.point
       : mapViewportPointToQuad(status.point, status.viewport, final?.ownerQuad);
-    if (!point) {
+    const metrics = point ? await this._sendCommand(sessionRef, "Page.getLayoutMetrics", {},
+      commandResults, signal, trustedRead) : null;
+    const layout = metrics?.result?.cssLayoutViewport || metrics?.result?.layoutViewport;
+    const scrollX = Number(layout?.pageX);
+    const scrollY = Number(layout?.pageY);
+    const width = Number(layout?.clientWidth);
+    const height = Number(layout?.clientHeight);
+    if (!point || ![scrollX, scrollY, width, height].every(Number.isFinite)) {
       status.receivesEvents = false;
       status.reasons = [...new Set([...(status.reasons || []), "frameTransformUnsupported"])];
       status.frameChain = frameChain;
       return;
     }
+    status.point = point;
+    status.frameChain = frameChain;
+    // The frame-local check only sees the frame's own viewport. A point outside the top viewport is scrolled into
+    // view first, because the top document hit test finds no node there and pointer input would land nowhere.
+    if (status.visible === true && (point.x < 0 || point.y < 0 || point.x >= width || point.y >= height)) {
+      status.inViewport = false;
+      status.needsScroll = true;
+      status.receivesEvents = false;
+      status.reasons = [...new Set([...(status.reasons || []), "outsideViewport"])];
+      return;
+    }
+    // Box model quads and input events use top viewport coordinates; DOM.getNodeForLocation hit-tests the top
+    // document, so only the hit test adds the top document's scroll offset.
     const hit = await this._sendCommand(sessionRef, "DOM.getNodeForLocation", {
-      x: point.x, y: point.y, includeUserAgentShadowDOM: true,
+      x: point.x + scrollX, y: point.y + scrollY, includeUserAgentShadowDOM: true,
     }, commandResults, signal, trustedRead);
     const hitFrameId = hit.result?.frameId || null;
     final.parentHitFrameId = hitFrameId;
-    status.point = point;
-    status.frameChain = frameChain;
     const frameOwnerHit = !!target.frame && hit.result?.backendNodeId === target.frameChain.at(-1).ownerBackendNodeId;
     if (hitFrameId !== target.frameId && !frameOwnerHit) {
       status.receivesEvents = false;

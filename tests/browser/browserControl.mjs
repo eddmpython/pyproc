@@ -586,6 +586,53 @@ try {
       && semanticState.result.result.value.trusted.shadow === true && semanticState.result.result.value.trusted.frame === true,
   JSON.stringify(semanticState.result?.result?.value));
 
+  // The frame hit test runs in document coordinates. A scrolled parent page must not move it off the frame.
+  await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: `(() => {
+      document.getElementById("semantic-frame").style.marginTop = "900px";
+      window.scrollTo(0, 900);
+      return window.scrollY;
+    })()`,
+    returnByValue: true,
+  }, "externalEffect");
+  const scrolledFrameAction = toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "click", locator: { by: "role", value: "button", name: "Frame action",
+      frame: [{ by: "name", value: "semantic-frame" }] }, timeoutMs: 2000, expectedRisk: "externalEffect" }],
+  }));
+  const scrolledFrameState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "window.browserControlFixture.actionability()", returnByValue: true,
+  }, "externalEffect"));
+  check("바깥 화면을 내린 뒤에도 frame 안 단추에 trusted click을 보냄",
+    scrolledFrameAction.actions?.[0]?.result?.trusted === true
+      && scrolledFrameState.result?.result?.value?.counts?.frame === 3,
+  JSON.stringify({ action: scrolledFrameAction.actions?.[0]?.result || scrolledFrameAction,
+    count: scrolledFrameState.result?.result?.value?.counts?.frame ?? null }));
+  await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "window.scrollTo(0, 0)", returnByValue: true,
+  }, "externalEffect");
+  const belowFoldFrameAction = toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "click", locator: { by: "role", value: "button", name: "Frame action",
+      frame: [{ by: "name", value: "semantic-frame" }] }, timeoutMs: 2000, expectedRisk: "externalEffect" }],
+  }));
+  const belowFoldFrameState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "({ state: window.browserControlFixture.actionability(), scrollY: window.scrollY })", returnByValue: true,
+  }, "externalEffect"));
+  check("바깥 화면 아래에 있는 frame 안 단추는 화면 안으로 내린 뒤 trusted click을 보냄",
+    belowFoldFrameAction.actions?.[0]?.result?.trusted === true
+      && belowFoldFrameState.result?.result?.value?.state?.counts?.frame === 4
+      && belowFoldFrameState.result?.result?.value?.scrollY > 0,
+  JSON.stringify({ action: belowFoldFrameAction.actions?.[0]?.result || belowFoldFrameAction,
+    value: belowFoldFrameState.result?.result?.value ?? null }));
+  await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: `(() => {
+      document.getElementById("semantic-frame").style.marginTop = "";
+      window.scrollTo(0, 0);
+    })()`,
+    returnByValue: true,
+  }, "externalEffect");
+
   await browserCommand(sessionRef, "Runtime.evaluate", {
     expression: `(() => {
       const frame = document.getElementById("semantic-frame");
@@ -609,7 +656,7 @@ try {
   check("parent document overlay가 frame target의 actionability를 차단",
     frameOverlayAction.result.isError === true
       && toolText(frameOverlayAction).code === "BROWSER_AUTOMATION_ACTIONABILITY_TIMEOUT"
-      && frameOverlayState.result?.result?.value?.counts?.frame === 2,
+      && frameOverlayState.result?.result?.value?.counts?.frame === 4,
   JSON.stringify(toolText(frameOverlayAction)));
   await browserCommand(sessionRef, "Runtime.evaluate", {
     expression: "document.getElementById('frame-action-overlay')?.remove()", returnByValue: true,
@@ -629,7 +676,7 @@ try {
   }, "externalEffect"));
   check("frame snapshot의 글자 locator가 같은 frame의 trusted click을 보냄",
     frameClicked?.actions?.[0]?.result?.trusted === true
-      && frameClickedState.result?.result?.value?.counts?.frame === 3,
+      && frameClickedState.result?.result?.value?.counts?.frame === 5,
   JSON.stringify({ action: frameClicked?.actions?.[0]?.result || null,
     count: frameClickedState.result?.result?.value?.counts?.frame || null }));
   await browserCommand(sessionRef, "Runtime.evaluate", {

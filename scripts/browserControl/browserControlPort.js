@@ -39,7 +39,7 @@ function releasesInterception(command) {
 }
 const TRUSTED_READ_METHODS = new Set([
   "Accessibility.getPartialAXTree", "Accessibility.queryAXTree", "DOM.getDocument", "DOM.getBoxModel", "DOM.getFrameOwner", "DOM.getNodeForLocation", "DOM.resolveNode", "Page.createIsolatedWorld",
-  "Page.getFrameTree", "Runtime.callFunctionOn", "Runtime.evaluate", "Runtime.releaseObject",
+  "Page.getFrameTree", "Page.getLayoutMetrics", "Runtime.callFunctionOn", "Runtime.evaluate", "Runtime.releaseObject",
 ]);
 
 export class BrowserControlError extends Error {
