@@ -377,6 +377,16 @@ export async function assertBrowserControlContract() {
     origin:"http://allowed.test",quotaSize:1024,
   }) === "externalEffect", "허용 origin quota 진단 또는 override를 parameter guard가 막았다");
 
+  const speedMethods = ["Emulation.setCPUThrottlingRate", "Network.emulateNetworkConditions", "Network.setBlockedURLs"];
+  const speedPolicy = new BrowserControlPolicy({ targetOrigins: ["http://allowed.test"], methods: speedMethods,
+    maxRisk: "mutate" });
+  assert(speedMethods.every((method) => speedPolicy.authorizeCommand(guardedTarget, method, {}) === "mutate"),
+    "페이지 속도 측정의 망·CPU 느리게 하기가 mutate로 분류되지 않았다");
+  rejected = false;
+  try { new BrowserControlPolicy({ targetOrigins: ["http://allowed.test"], methods: speedMethods, maxRisk: "read" }); }
+  catch (error) { rejected = /exceeds maxRisk/.test(error.message); }
+  assert(rejected, "읽기만 허용한 정책이 망·CPU 느리게 하기를 받았다");
+
   const blankTransport = new FakeTransport();
   const blankPort = new BrowserControlPort({
     transport: blankTransport,

@@ -42,6 +42,10 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
   "Storage.getUsageAndQuota": "read",
   "DOM.focus": "mutate",
   "DOM.setAttributeValue": "mutate",
+  // Page speed measurement: slow the controlled browser's network and CPU and drop requests by URL pattern. These change only how this browser loads pages; nothing is sent anywhere.
+  "Emulation.setCPUThrottlingRate": "mutate",
+  "Network.emulateNetworkConditions": "mutate",
+  "Network.setBlockedURLs": "mutate",
   "DOM.setFileInputFiles": "externalEffect",
   "DOMStorage.clear": "externalEffect",
   "DOMStorage.removeDOMStorageItem": "externalEffect",
