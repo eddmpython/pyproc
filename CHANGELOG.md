@@ -12,6 +12,20 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Fixed
+
+- **A task tab that asks before it is left no longer holds up the next task.** Closing a User Browser task tab whose
+  page asks before it is left (an editor with unsaved text) waited until someone answered, and the ending task held its
+  site rules until its tabs closed, so every task after it timed out before its first tab. The extension now enables
+  Page on the tab before it closes it and answers "leave" when the close is still waiting after 3 seconds; a tab that
+  still has not closed 3 seconds later is left open for the user, and the task ends and lets the next one start
+  anyway. Gate: `test:contracts` (user browser site rules).
+
+  한국어: 할 일 탭이 떠날지 묻는 화면(쓰다 만 글이 있는 편집기)에 있으면 탭을 닫는 동안 누군가 답할 때까지 기다렸고,
+  끝나는 할 일은 탭이 닫힐 때까지 사이트 차단 규칙을 쥐고 있어 그 뒤 할 일이 모두 첫 탭 전에 시간이 다 됐다. 이제 확장이
+  탭을 닫기 전에 그 탭의 Page를 켜 두고, 3초 뒤에도 닫히지 않으면 '나가기'로 답한다. 그래도 3초 안에 닫히지 않는 탭은
+  사용자에게 남기고 할 일은 끝나 다음 할 일이 시작된다.
+
 ## 0.0.43 - 2026-11-02
 
 ### Fixed

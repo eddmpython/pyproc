@@ -53,6 +53,9 @@ let pendingPair = null;
 let sessionCounter = 0;
 const task = { windowId: null, tabs: new Set(), created: new Set(), sessions: new Map(),
   tabSessions: new Map(), childSessions: new Map() };
+// How long closing a task tab waits for the debugger, then for the close before it answers the page's leave question,
+// and then again before it gives up on the tab.
+const TAB_CLOSE_MS = 3000;
 const DOWNLOAD_WAIT_MAX_MS = 600000;
 // How long a download the browser created stays claimable by a Page.downloadWillBegin that arrives after it.
 const DOWNLOAD_MATCH_MS = 5000;
@@ -188,6 +191,41 @@ function persistTask() {
     attached: [...task.tabSessions.keys()] } });
 }
 
+// Whether `promise` settles (either way) within `ms`.
+function settlesWithin(promise, ms) {
+  let timer;
+  const late = new Promise((resolve) => { timer = setTimeout(() => resolve(false), ms); });
+  return Promise.race([promise.then(() => true, () => true), late]).finally(() => clearTimeout(timer));
+}
+
+// Closes one of the task's own tabs (its sessions are detached first). A page that asks before it is left
+// (beforeunload) keeps chrome.tabs.remove waiting until someone answers, and an ending task waits for its tabs before
+// it lets go of the site rules, which the next task waits for: on 2026-11-11 a task tab left on a site's editor asked,
+// nobody answered, and every task after it timed out. Only a debugger that had Page enabled before the question was
+// asked can answer it, so the tab is attached and Page enabled before the close, and a close still waiting after
+// TAB_CLOSE_MS is answered "leave" (the tab is the task's own and the task is done with it). A task the user ended by
+// cancelling the debugging bar is not attached again (`answer` false), so its tabs only get the bounded wait. A tab that
+// has not closed after that is left to the user, and the close returns false instead of waiting for an answer.
+async function closeTaskTab(tabId, answer = true) {
+  const debuggee = { tabId };
+  if (answer) {
+    await settlesWithin(chrome.debugger.attach(debuggee, PROTOCOL_VERSION)
+      .then(() => chrome.debugger.sendCommand(debuggee, "Page.enable", {})), TAB_CLOSE_MS);
+  }
+  const removed = chrome.tabs.remove(tabId);
+  let closed = await settlesWithin(removed, TAB_CLOSE_MS);
+  if (!closed && answer) {
+    await settlesWithin(chrome.debugger.sendCommand(debuggee, "Page.handleJavaScriptDialog", { accept: true }),
+      TAB_CLOSE_MS);
+  }
+  if (!closed) closed = await settlesWithin(removed, TAB_CLOSE_MS);
+  // Gone with its tab when the close went through; otherwise the tab stays without this extension debugging it.
+  if (answer) {
+    try { await chrome.debugger.detach(debuggee); } catch {}
+  }
+  return closed;
+}
+
 async function closeLeftoverTask() {
   const { task: leftover } = await chrome.storage.session.get("task");
   for (const tabId of leftover?.attached || []) {
@@ -196,7 +234,7 @@ async function closeLeftoverTask() {
     }
   }
   for (const tabId of leftover?.created || []) {
-    try { await chrome.tabs.remove(tabId); } catch {}
+    await closeTaskTab(tabId);
   }
   await chrome.storage.session.remove("task");
   // Whatever task held site rules ended with the service worker that ran it; its tabs are closed by now.
@@ -356,9 +394,7 @@ async function endTask(reason) {
   try {
     for (const sessionId of sessions) await detachSession(sessionId);
     // Tabs the user handed over (dragged into the window, or opened there themselves) are never closed.
-    for (const tabId of created) {
-      try { await chrome.tabs.remove(tabId); } catch {}
-    }
+    for (const tabId of created) await closeTaskTab(tabId, reason !== "canceledByUser");
   } finally {
     tabsClosed();
   }
@@ -477,8 +513,7 @@ async function handle(message, epoch) {
       if (!task.created.has(tabId)) throw new ProviderError(-32000, "a tab the user handed over is never closed");
       const attachedSession = task.tabSessions.get(tabId);
       if (attachedSession) await detachSession(attachedSession);
-      await chrome.tabs.remove(tabId);
-      return { closed: true };
+      return { closed: await closeTaskTab(tabId) };
     }
     case "PyprocUserBrowser.activateTab":
       await chrome.tabs.update(tabIdOf(params.targetId), { active: true });

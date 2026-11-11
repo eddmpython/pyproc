@@ -74,6 +74,12 @@ const fixture = createServer((req, res) => {
       };</script>`);
     return;
   }
+  if (req.url === "/editor") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(`<!doctype html><title>unsaved editor</title><textarea>draft</textarea><script>
+      addEventListener("beforeunload", (event) => { event.preventDefault(); event.returnValue = ""; });</script>`);
+    return;
+  }
   if (req.url === "/report.pdf") {
     res.writeHead(200, { "Content-Type": "application/pdf", "Content-Disposition": "attachment; filename=report.pdf",
       "Cache-Control": "no-store" });
@@ -408,6 +414,27 @@ async function journey({ kind, product, executable }, installed, app) {
   const pageTargets = (await direct.send("Target.getTargets")).targetInfos.filter((info) => info.url.startsWith(origin));
   check(`${label}ending the task leaves no task tab and no fixture page behind`,
     afterEnd.tabs.length === 0 && pageTargets.length === 0, JSON.stringify({ tabs: afterEnd.tabs, pageTargets }));
+  // A task tab left on a page that asks before it is left (an editor with unsaved text, after a click) is answered
+  // "leave" when the task ends, instead of holding that task, and the next one's site rules, until someone answers.
+  // The wait of at least the extension's 3 seconds shows the page did ask.
+  const clickedEditor = async () => {
+    const tab = await paired.send("PyprocUserBrowser.openTab", { url: `${origin}/editor` });
+    const session = (await paired.send("PyprocUserBrowser.attachTab", { targetId: tab.targetId })).sessionId;
+    for (const type of ["mousePressed", "mouseReleased"]) {
+      await paired.send("Input.dispatchMouseEvent", { type, x: 20, y: 20, button: "left", clickCount: 1 }, session);
+    }
+    return tab;
+  };
+  await clickedEditor();
+  const ending = Date.now();
+  await paired.send("PyprocUserBrowser.endTask");
+  const askedMs = Date.now() - ending;
+  const editorPages = (await direct.send("Target.getTargets")).targetInfos
+    .filter((info) => info.url.startsWith(`${origin}/editor`)).length;
+  const nextTab = await paired.send("PyprocUserBrowser.openTab", { url: `${origin}/fixture` }).then(() => true, () => false);
+  await paired.send("PyprocUserBrowser.endTask");
+  check(`${label}a task tab whose page asks before it is left is answered and closed, and the next task opens a tab`,
+    askedMs >= 2900 && editorPages === 0 && nextTab, JSON.stringify({ askedMs, editorPages, nextTab }));
   paired.close();
 
   if (kind === BROWSERS[0].kind) {

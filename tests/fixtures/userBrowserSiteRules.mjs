@@ -22,6 +22,10 @@ const dnr = { rules: new Map(), delayMs: 0, closeMs: 0, rulesAtClose: [] };
 // `other`: another extension (or a policy) holds the setting on, so this extension's own setting has no effect.
 const prediction = { value: true, controlled: false, other: false };
 const newPort = () => ({ onMessage: listeners(), onDisconnect: listeners(), postMessage: (message) => posted.push(message) });
+// A tab marked `asks` holds a page that asks before it is left: removing it waits until that question is answered
+// "leave", which only a debugger that had Page enabled before the close can do. A tab marked `locked` takes no debugger.
+const asking = new Map();
+const listening = new Set();
 globalThis.chrome = {
   runtime: { connectNative: () => (port = newPort()), id: "fixture" },
   storage: {
@@ -43,14 +47,25 @@ globalThis.chrome = {
   },
   tabs: {
     create: async ({ windowId, url }) => { const id = nextTab++; tabs.set(id, { id, windowId, url }); return { id }; },
-    remove: async (id) => { await tick(dnr.closeMs); dnr.rulesAtClose.push(dnr.rules.size); tabs.delete(id);
+    remove: async (id) => {
+      if (tabs.get(id)?.asks) await new Promise((resolve) => { if (listening.has(id)) asking.set(id, resolve); });
+      await tick(dnr.closeMs); dnr.rulesAtClose.push(dnr.rules.size); tabs.delete(id);
       events.removed.fire(id); },
     get: async (id) => tabs.get(id), update: async () => {},
     onCreated: events.created, onAttached: events.attachedTab, onDetached: events.detachedTab, onRemoved: events.removed,
   },
   downloads: { search: async () => [], onCreated: events.downloadCreated, onChanged: events.downloadChanged },
   debugger: {
-    attach: async () => {}, detach: async () => {}, sendCommand: async () => ({}),
+    attach: async ({ tabId }) => { if (tabs.get(tabId)?.locked) throw new Error("Cannot access a chrome:// URL"); },
+    detach: async ({ tabId }) => { listening.delete(tabId); },
+    sendCommand: async ({ tabId }, method, params) => {
+      if (method === "Page.enable" && !tabs.get(tabId)?.locked) listening.add(tabId);
+      if (method === "Page.handleJavaScriptDialog" && params?.accept && asking.has(tabId)) {
+        asking.get(tabId)();
+        asking.delete(tabId);
+      }
+      return {};
+    },
     onEvent: events.debuggerEvent, onDetach: events.debuggerDetach,
   },
   declarativeNetRequest: {
@@ -213,6 +228,35 @@ check("a profile whose prediction another extension keeps on gets no rules", [pr
 prediction.other = false;
 check("once nothing else keeps it on the same control host blocks sites",
   (await reply(block())).result?.preloading, "off");
+await reply(send("PyprocUserBrowser.endTask"));
+
+// A task tab left on a page that asks before it is left (an editor with unsaved text): ending the task answers "leave",
+// the tab closes, and the next task's rules go in instead of waiting for an answer nobody gives.
+const replyWithin = async (id, ms) => {
+  for (let waited = 0; waited < ms; waited += 20) {
+    const found = posted.find((message) => message.id === id);
+    if (found) return found;
+    await tick(20);
+  }
+  return null;
+};
+await reply(block(["a.example"], []));
+const editor = Number((await reply(send("PyprocUserBrowser.openTab", { url: "https://editor.example/" }))).result
+  .targetId);
+tabs.get(editor).asks = true;
+const answered = await replyWithin(send("PyprocUserBrowser.endTask"), 15000);
+check("a task tab that asks before it is left is answered and closes", [Boolean(answered?.result?.ended),
+  tabs.has(editor), held()], [true, false, { rules: 0, predicting: true }]);
+// A question this extension cannot answer leaves that tab to the user; the task ends and the next one starts anyway.
+await reply(block(["a.example"], []));
+const locked = Number((await reply(send("PyprocUserBrowser.openTab", { url: "https://editor.example/" }))).result
+  .targetId);
+Object.assign(tabs.get(locked), { asks: true, locked: true });
+const unanswered = await replyWithin(send("PyprocUserBrowser.endTask"), 20000);
+check("a tab whose question goes unanswered stays and the task still ends", [Boolean(unanswered?.result?.ended),
+  tabs.has(locked), held()], [true, true, { rules: 0, predicting: true }]);
+check("the next task blocks sites after it", (await replyWithin(block(["b.example"], []), 5000))?.result?.enforcedBy,
+  "extension");
 await reply(send("PyprocUserBrowser.endTask"));
 
 console.log(JSON.stringify(checks));
