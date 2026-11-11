@@ -25,7 +25,9 @@ import { blockSites, unblockSites } from "./siteBlock.js";
 
 const PROTOCOL_VERSION = "1.3";
 // What this extension does beyond the protocol version, so a control host asks for it only where it is done.
-const CAPABILITIES = Object.freeze(["blockSites"]);
+// `closesAskingTabs`: closing a task tab whose page asks before it is left answers "leave" (closeTaskTab), so a caller
+// that needs it can tell a browser still running an extension loaded before setup replaced its folder.
+const CAPABILITIES = Object.freeze(["blockSites", "closesAskingTabs"]);
 const PAIRING_WINDOW_MS = 120000;
 const MAX_RECONNECT_MS = 30000;
 // Tab-level domains the provider's observation and actions use; everything else is refused before chrome.debugger.

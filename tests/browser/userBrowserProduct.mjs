@@ -233,7 +233,8 @@ async function journey({ kind, product, executable }, installed, app) {
   check(`${label}the browser starts the native host, which announces its pipe for the extension's profile`,
     loaded.id === installed.extensionIds[0] && Boolean(host?.pipeName), JSON.stringify({ loaded, host }));
   check(`${label}the announcement says what the running extension can do`,
-    JSON.stringify(host?.capabilities) === JSON.stringify(["blockSites"]), JSON.stringify(host?.capabilities));
+    JSON.stringify(host?.capabilities) === JSON.stringify(["blockSites", "closesAskingTabs"]),
+    JSON.stringify(host?.capabilities));
   // The pipe's access list, read through a client handle of the pipe itself (no control host is connected yet).
   const user = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`.toLowerCase();
   const pipeShortName = host.pipeName.slice("\\\\.\\pipe\\".length);

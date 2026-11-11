@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:4322a16c46c7509daad85b06a0231244df9bb5fb7cb9bcfa201968d0cac2268b",
-  "catalogDigest": "sha256:a26d13c066786c071d3fbbac9d906e204abf228548b1143baff7a746d383e73a",
+  "generatedFromDigest": "sha256:1f6a4cde7ab045c3b33d7364903fa18ac2642b09d9964320b8eb8eb7b3074e3e",
+  "catalogDigest": "sha256:a975346881f55ff16cda11a6111385de07ec034dee016a0fd4fc4fee4ef16ec3",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -275,8 +275,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/user-browser.md",
-      "bytes": 13974,
-      "sha256": "sha256:2226755f167c26ae0e19e01505acf3e6d7481a0cbc75018368f6187cf6de212f"
+      "bytes": 14390,
+      "sha256": "sha256:09aa321f8b3793a4ff6145c63c471944db82c483d64508881d51e3fc23617d34"
     },
     {
       "path": "skills/benchmark-pyproc/references/benchmarking.md",
