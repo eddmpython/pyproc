@@ -12,6 +12,19 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.44 - 2026-11-11
+
+### Changed
+
+- **Throttling and URL blocking for page speed checks.** `Emulation.setCPUThrottlingRate`,
+  `Network.emulateNetworkConditions`, and `Network.setBlockedURLs` are now accepted at `mutate` risk, so a controlled
+  browser can measure a page under phone conditions. They only change how that browser loads pages and send nothing
+  out; a policy capped at `read` still refuses them. Gate: `test:contracts` (browser control).
+
+  한국어: 페이지 속도를 휴대폰 조건으로 재도록 CPU를 느리게 하고 망을 느리게 하고 주소를 막는 세 명령을 `mutate` 등급으로
+  받는다. 세 명령은 제어하는 브라우저가 페이지를 받는 방식만 바꾸고 밖으로 보내는 것이 없으며, `read`까지만 허용한 정책은
+  받지 않는다.
+
 ### Fixed
 
 - **A task tab that asks before it is left no longer holds up the next task.** Closing a User Browser task tab whose
