@@ -12,6 +12,26 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Fixed
+
+- **The User Browser extension runs the version setup installed without a reload by hand.** The browser keeps running
+  the extension code it loaded, also after setup replaced the folder and after the browser restarted (a Chrome restarted
+  that morning still ran 0.0.39 code from a 0.0.44 folder), so tasks met fixed problems again. Setup now writes the
+  version it installed into the extension's `config.js`, and the running extension reads that file from its folder when
+  it starts and every 15 seconds: when the folder holds another version it reloads itself, only while no control host is
+  connected and no task window, pairing, or site rule is open, and once per installed version. The pairing and the
+  profile id stay. The extension announces it as `reloadsWhenReplaced`, and `user-browser status` names the `pid` of the
+  native host each running profile started, so a caller that just ran setup tells when the extension started again. A
+  browser running an extension older than this needs the reload button once more. Gate: `test:user-browser`.
+
+  한국어: 브라우저는 설치가 확장 폴더를 바꾼 뒤에도, 브라우저를 다시 켠 뒤에도 처음 읽은 확장 코드를 계속 돌려(그날
+  아침 다시 켠 Chrome이 0.0.44 폴더에서 0.0.39 코드를 돌렸다) 고친 문제를 할 일이 다시 만났다. 이제 설치가 넣은 판을 확장의
+  `config.js`에 적고, 도는 확장이 켜질 때와 15초마다 폴더의 그 파일을 읽어 다른 판이 들어와 있으면 스스로 새로 읽는다. 연결된
+  제어 쪽, 할 일 창, 연결 확인, 사이트 차단 규칙이 하나도 없을 때만, 한 판에 한 번만 한다. 연결 짝과 프로필 번호는 그대로
+  남는다. 확장은 이것을 `reloadsWhenReplaced`로 알리고, `user-browser status`는 도는 프로필마다 그 확장이 띄운 native host의
+  `pid`를 알려 설치를 막 돌린 쪽이 확장이 다시 켜진 것을 안다. 이보다 예전 확장이 도는 브라우저는 새로고침 단추를 한 번 더
+  누른다.
+
 ## 0.0.45 - 2026-11-12
 
 ### Added

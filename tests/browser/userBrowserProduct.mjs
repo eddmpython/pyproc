@@ -127,6 +127,33 @@ function findInstalled(paths) {
   return paths.find((path) => existsSync(path)) || null;
 }
 
+// How often the extension reads its folder's installed version (REPLACED_CHECK_MS in serviceWorker.js).
+const REPLACED_CHECK_MS = 15000;
+
+// A control host's connection to the pipe the native host announced.
+async function pipeClient(pipeName) {
+  const socket = await new Promise((resolve, reject) => {
+    const opened = connect(pipeName);
+    opened.once("connect", () => resolve(opened));
+    opened.once("error", reject);
+  });
+  return new CdpConnection(userBrowserPipeChannel(socket), { timeoutMs: 30000 });
+}
+
+// Turns on developer mode the way the extensions page's switch does; true once the browser says it is on.
+async function developerMode(direct, kind) {
+  const { targetId } = await direct.send("Target.createTarget", { url: `${kind}://extensions` });
+  try {
+    const { sessionId } = await direct.send("Target.attachToTarget", { targetId, flatten: true });
+    return await waitFor(async () => (await direct.send("Runtime.evaluate", { expression:
+      "chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true })"
+        + ".then(() => chrome.developerPrivate.getProfileConfiguration()).then((config) => config.inDeveloperMode)",
+    awaitPromise: true, returnByValue: true }, sessionId)).result?.value === true, 10000) === true;
+  } finally {
+    await direct.send("Target.closeTarget", { targetId }).catch(() => {});
+  }
+}
+
 function frameOf(message) {
   const body = Buffer.from(typeof message === "string" ? message : JSON.stringify(message), "utf8");
   const header = Buffer.alloc(4);
@@ -233,7 +260,7 @@ async function journey({ kind, product, executable }, installed, app) {
   check(`${label}the browser starts the native host, which announces its pipe for the extension's profile`,
     loaded.id === installed.extensionIds[0] && Boolean(host?.pipeName), JSON.stringify({ loaded, host }));
   check(`${label}the announcement says what the running extension can do`,
-    JSON.stringify(host?.capabilities) === JSON.stringify(["blockSites", "closesAskingTabs"]),
+    JSON.stringify(host?.capabilities) === JSON.stringify(["blockSites", "closesAskingTabs", "reloadsWhenReplaced"]),
     JSON.stringify(host?.capabilities));
   // The pipe's access list, read through a client handle of the pipe itself (no control host is connected yet).
   const user = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`.toLowerCase();
@@ -378,11 +405,7 @@ async function journey({ kind, product, executable }, installed, app) {
       && blockedOpen.details?.blockedHost === "www.ads.invalid",
     JSON.stringify({ siteRules, code: blockedOpen?.code, details: blockedOpen?.details }));
 
-  const raw = async () => new CdpConnection(userBrowserPipeChannel(await new Promise((resolve, reject) => {
-    const socket = connect(host.pipeName);
-    socket.once("connect", () => resolve(socket));
-    socket.once("error", reject);
-  })), { timeoutMs: 30000 });
+  const raw = () => pipeClient(host.pipeName);
   const refusal = (promise) => promise.then(() => "", (error) => String(error.message));
   const stranger = await waitFor(() => raw(), 10000);
   const wrongKey = await refusal(stranger.send("PyprocUserBrowser.hello", { key: "0".repeat(64) }));
@@ -418,15 +441,21 @@ async function journey({ kind, product, executable }, installed, app) {
   // A task tab left on a page that asks before it is left (an editor with unsaved text, after a click) is answered
   // "leave" when the task ends, instead of holding that task, and the next one's site rules, until someone answers.
   // The wait of at least the extension's 3 seconds shows the page did ask.
+  // The click lands on the loaded editor (a click on the page before it, or one the page does not take as the user's,
+  // lets it leave without asking), which the page then says.
   const clickedEditor = async () => {
     const tab = await paired.send("PyprocUserBrowser.openTab", { url: `${origin}/editor` });
     const session = (await paired.send("PyprocUserBrowser.attachTab", { targetId: tab.targetId })).sessionId;
+    const read = async (expression) => (await paired.send("Runtime.evaluate", { expression, returnByValue: true },
+      session)).result?.value;
+    await waitFor(async () => await read("document.title === 'unsaved editor' && document.readyState === 'complete'"),
+      10000);
     for (const type of ["mousePressed", "mouseReleased"]) {
       await paired.send("Input.dispatchMouseEvent", { type, x: 20, y: 20, button: "left", clickCount: 1 }, session);
     }
-    return tab;
+    return read("navigator.userActivation.hasBeenActive");
   };
-  await clickedEditor();
+  const activated = await clickedEditor();
   const ending = Date.now();
   await paired.send("PyprocUserBrowser.endTask");
   const askedMs = Date.now() - ending;
@@ -435,7 +464,8 @@ async function journey({ kind, product, executable }, installed, app) {
   const nextTab = await paired.send("PyprocUserBrowser.openTab", { url: `${origin}/fixture` }).then(() => true, () => false);
   await paired.send("PyprocUserBrowser.endTask");
   check(`${label}a task tab whose page asks before it is left is answered and closed, and the next task opens a tab`,
-    askedMs >= 2900 && editorPages === 0 && nextTab, JSON.stringify({ askedMs, editorPages, nextTab }));
+    activated === true && askedMs >= 2900 && editorPages === 0 && nextTab,
+    JSON.stringify({ activated, askedMs, editorPages, nextTab }));
   paired.close();
 
   if (kind === BROWSERS[0].kind) {
@@ -448,8 +478,41 @@ async function journey({ kind, product, executable }, installed, app) {
       JSON.stringify({ hostSource: again.hostSource, hostIntact, serving }));
   }
 
+  // Setup installing another version while the browser runs the extension: the extension reloads itself to run it,
+  // never while a control host is connected, and once for that version. The browser lets an extension reload itself
+  // only in developer mode, which a user who loaded the folder has on and this isolated browser turns on here.
+  const developer = await developerMode(direct, kind);
+  const configFile = join(installed.extensionPath, "config.js");
+  const installedConfig = await readFile(configFile, "utf8");
+  const announced = async () => (await listUserBrowserHosts()).find((entry) => entry.profileId === host.profileId);
+  const before = await announced();
+  const holder = await pipeClient(before.pipeName);
+  await holder.send("PyprocUserBrowser.hello", { key });
+  await writeFile(configFile, installedConfig.replace(/EXTENSION_VERSION = "([^"]*)"/, "EXTENSION_VERSION = \"$1-gate\""));
+  await delay(REPLACED_CHECK_MS + 5000);
+  const held = (await announced())?.pipeName === before.pipeName
+    && await holder.send("PyprocUserBrowser.listTabs").then(() => true, () => false);
+  holder.close();
+  const reloaded = await waitFor(async () => {
+    const now = await announced();
+    return now && now.pipeName !== before.pipeName ? now : null;
+  }, REPLACED_CHECK_MS + 30000);
+  await delay(REPLACED_CHECK_MS + 5000);
+  const settled = (await announced())?.pipeName === reloaded?.pipeName;
+  // A status read names the native host the reloaded extension started, so a caller tells the reload by its pid.
+  const statusPid = (await userBrowserStatus()).profiles.find((entry) => entry.profileId === host.profileId)?.pid;
+  const newHost = Boolean(reloaded) && reloaded.pid !== before.pid && statusPid === reloaded.pid;
+  const returning = reloaded ? await pipeClient(reloaded.pipeName) : null;
+  const helloAgain = await returning?.send("PyprocUserBrowser.hello", { key }).catch((error) => String(error.message));
+  returning?.close();
+  check(`${label}the extension reloads itself once setup installed another version, not while a control host is connected,`
+    + " and keeps its pairing", developer && held && Boolean(reloaded) && settled && helloAgain?.authorized === true
+      && newHost && reloaded.capabilities.includes("reloadsWhenReplaced"),
+  JSON.stringify({ developer, held, reloaded: Boolean(reloaded), settled, newHost, helloAgain }));
+
   browser.close();
   browser = null;
+  await writeFile(configFile, installedConfig);
   const gone = await waitFor(async () => !(await listUserBrowserHosts()).some((entry) => product.test(entry.product)),
     20000);
   check(`${label}once the browser is gone no host is announced, even when the browser was killed`, gone === true);

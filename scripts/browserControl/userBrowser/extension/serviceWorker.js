@@ -20,14 +20,25 @@
 // Every control-host connection has a number the native host gives it. A request is bound to the connection it came
 // from: its reply, and any effect it completes after an await (authorization, a tab, an attachment), is dropped or
 // undone when that connection is gone, so nothing one control host started ever reaches the next one.
-import { HOST_NAME, PRESET_PAIRING_SHA256 } from "./config.js";
+//
+// The browser keeps running the code it loaded until the extension is reloaded, also after setup replaced the folder
+// and after the browser restarted: on 2026-11-12 a Chrome restarted that morning still ran 0.0.39 code from a 0.0.44
+// folder. The worker reloads the extension itself once the folder holds another installed version (reloadWhenReplaced),
+// and only while nothing is connected or open, so the user reloads it by hand at most once, to get this code.
+import { EXTENSION_VERSION, HOST_NAME, PRESET_PAIRING_SHA256 } from "./config.js";
 import { blockSites, unblockSites } from "./siteBlock.js";
 
 const PROTOCOL_VERSION = "1.3";
 // What this extension does beyond the protocol version, so a control host asks for it only where it is done.
 // `closesAskingTabs`: closing a task tab whose page asks before it is left answers "leave" (closeTaskTab), so a caller
 // that needs it can tell a browser still running an extension loaded before setup replaced its folder.
-const CAPABILITIES = Object.freeze(["blockSites", "closesAskingTabs"]);
+// `reloadsWhenReplaced`: the extension reloads itself once setup installed another version in its folder
+// (reloadWhenReplaced), so a caller waits for that instead of asking the user to reload it.
+const CAPABILITIES = Object.freeze(["blockSites", "closesAskingTabs", "reloadsWhenReplaced"]);
+// How often a running worker reads its folder's installed version.
+const REPLACED_CHECK_MS = 15000;
+// The version line the installer writes into config.js; a folder without it (the source folder) is never reloaded.
+const INSTALLED_VERSION = /^export const EXTENSION_VERSION = "([0-9A-Za-z.+-]{1,32})";$/m;
 const PAIRING_WINDOW_MS = 120000;
 const MAX_RECONNECT_MS = 30000;
 // Tab-level domains the provider's observation and actions use; everything else is refused before chrome.debugger.
@@ -569,6 +580,48 @@ function onHostMessage(message) {
   );
 }
 
+// The version setup last installed in this extension's folder, read from disk and not from the code this worker runs;
+// null while setup is replacing the folder (config.js is written last) or when the folder was not installed.
+async function installedVersion() {
+  try {
+    const text = await (await fetch(chrome.runtime.getURL("config.js"), { cache: "no-store" })).text();
+    return INSTALLED_VERSION.exec(text)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
+// Nothing a reload would cut: no control host connected (it could start a task any moment), no task window or tab,
+// no pairing waiting for the user, no site rules held.
+function idle() {
+  return connection === 0 && task.windowId === null && task.tabs.size === 0 && task.created.size === 0
+    && task.sessions.size === 0 && pendingPair === null && siteOwner === 0;
+}
+
+// Reloads the extension when setup installed another version in its folder than the one this worker runs. Once per
+// installed version (kept in chrome.storage.local, which a reload keeps with the pairing and the profile id), so a
+// browser that would not take the new code never reloads it over and over. True when it asked for the reload.
+let checkingReplaced = false;
+async function reloadWhenReplaced() {
+  if (!EXTENSION_VERSION || checkingReplaced || !idle()) return false;
+  checkingReplaced = true;
+  try {
+    const installed = await installedVersion();
+    if (!installed || installed === EXTENSION_VERSION || await stored("reloadedFor") === installed) return false;
+    await chrome.storage.local.set({ reloadedFor: installed });
+    if (!idle()) {
+      await chrome.storage.local.remove("reloadedFor");
+      return false;
+    }
+    chrome.runtime.reload();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    checkingReplaced = false;
+  }
+}
+
 async function connect() {
   try {
     port = chrome.runtime.connectNative(HOST_NAME);
@@ -713,4 +766,6 @@ chrome.debugger.onDetach.addListener((source, reason) => {
     void endTask("canceledByUser");
   }
 });
-void closeLeftoverTask().finally(connect);
+// A worker that starts on a replaced folder reloads before it connects; one that keeps running finds out on its check.
+void closeLeftoverTask().catch(() => {}).then(reloadWhenReplaced).then((reloading) => { if (!reloading) void connect(); });
+setInterval(() => void reloadWhenReplaced(), REPLACED_CHECK_MS);

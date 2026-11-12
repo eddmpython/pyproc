@@ -198,8 +198,10 @@ export async function userBrowserStatus({ env = process.env } = {}) {
   const running = new Set(hosts.map((host) => host.profileId));
   const profiles = [];
   for (const host of hosts) {
+    // pid is the native host the running extension started: another pid for the same profile means that extension
+    // started again (for example it reloaded itself after setup replaced its folder).
     profiles.push(Object.freeze({ profileId: host.profileId, product: host.product,
-      paired: Boolean(await readKey(env, host.profileId)), capabilities: host.capabilities }));
+      paired: Boolean(await readKey(env, host.profileId)), capabilities: host.capabilities, pid: host.pid }));
   }
   // Pairings kept here, with whether their browser profile runs now (a paired browser that is closed is not lost).
   let names = [];

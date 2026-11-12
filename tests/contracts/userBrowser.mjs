@@ -239,6 +239,7 @@ export async function assertUserBrowserContract() {
   assert.equal(JSON.stringify(manifest).includes("<all_urls>"), false);
   assert.match(config, new RegExp(`HOST_NAME = "${USER_BROWSER_HOST_NAME.replaceAll(".", "\\.")}"`));
   assert.match(config, /PRESET_PAIRING_SHA256 = null;/);
+  assert.match(config, /EXTENSION_VERSION = null;/);
   // Profile data and browser-wide control stay out of reach; the debugging bar's cancel withdraws the task.
   const allowed = /const ALLOWED_DOMAINS = new Set\(\[([^\]]+)\]\)/.exec(worker)?.[1] || "";
   for (const domain of ["Target", "Fetch", "Storage", "Browser", "IndexedDB", "DOMStorage", "CacheStorage"]) {
@@ -249,7 +250,11 @@ export async function assertUserBrowserContract() {
     assert.equal(worker.includes(`"${method}"`), true, `${method} must be refused`);
   }
   assert.equal(worker.includes("canceled_by_user"), true);
-  assert.equal(/chrome\.cookies|chrome\.scripting|WebSocket|fetch\s*\(|silent-debugger/.test(worker), false);
+  assert.equal(/chrome\.cookies|chrome\.scripting|WebSocket|silent-debugger/.test(worker), false);
+  // Nothing goes to the network: the one fetch reads config.js of the extension's own folder, to tell that setup
+  // installed another version there (reloadWhenReplaced).
+  assert.deepEqual([...worker.matchAll(/fetch\s*\(([^,)]*)/g)].map((match) => match[1]),
+    ["chrome.runtime.getURL(\"config.js\""]);
 
   // Site rules, against an in-process chrome.* in its own process: installed only before a task's first tab, holding
   // every request type of the profile, removed with prediction given back once the task's tabs closed whatever ended it,

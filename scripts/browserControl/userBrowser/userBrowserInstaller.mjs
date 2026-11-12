@@ -120,10 +120,13 @@ export async function setupUserBrowser({ installRoot = join(userBrowserRoot(), "
   const extensionPath = join(root, "extension");
   await rm(extensionPath, { recursive: true, force: true });
   await cp(USER_BROWSER_EXTENSION_SOURCE, extensionPath, { recursive: true });
+  const { version } = JSON.parse(await readFile(join(extensionPath, "manifest.json"), "utf8"));
+  // Written last: an extension running from this folder reads EXTENSION_VERSION to tell a completed replacement.
   await writeFile(join(extensionPath, "config.js"), [
     "// config.js - written by the installer: the native messaging host this extension talks to.",
     `export const HOST_NAME = ${JSON.stringify(hostName)};`,
-    `export const PRESET_PAIRING_SHA256 = ${JSON.stringify(presetPairingSha256)};`, ""].join("\n"), "utf8");
+    `export const PRESET_PAIRING_SHA256 = ${JSON.stringify(presetPairingSha256)};`,
+    `export const EXTENSION_VERSION = ${JSON.stringify(String(version))};`, ""].join("\n"), "utf8");
   const manifestPath = join(root, `${hostName}.json`);
   await writeJsonAtomic(manifestPath, { name: hostName, description: "pyproc User Browser native host",
     path: hostPath, type: "stdio", allowed_origins: extensionIds.map((id) => `chrome-extension://${id}/`) });

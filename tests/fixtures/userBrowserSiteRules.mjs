@@ -125,10 +125,10 @@ const check = (name, value, expected) => checks.push({ name, ok: JSON.stringify(
 
 check("a restarted worker removes what an ended task left", held(), { rules: 0, predicting: true });
 check("the native host is told what the extension can do", posted.find((message) =>
-  message.method === "PyprocUserBrowserHost.hello")?.params?.capabilities, ["blockSites", "closesAskingTabs"]);
+  message.method === "PyprocUserBrowserHost.hello")?.params?.capabilities, ["blockSites", "closesAskingTabs", "reloadsWhenReplaced"]);
 connectClient();
 check("an unpaired control host cannot block sites", (await reply(block())).error?.code, -32003);
-check("hello names the capabilities", (await hello()).capabilities, ["blockSites", "closesAskingTabs"]);
+check("hello names the capabilities", (await hello()).capabilities, ["blockSites", "closesAskingTabs", "reloadsWhenReplaced"]);
 const installed = (await reply(block(["LINK.aff.test."], ["ads.test"]))).result;
 check("the answer says the extension enforces them", [installed.enforcedBy, installed.blockedHosts,
   installed.blockedDomains, installed.preloading], ["extension", ["link.aff.test"], ["ads.test"], "off"]);

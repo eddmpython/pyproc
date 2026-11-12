@@ -285,7 +285,7 @@ async function journey({ kind, prefix, executable }, installed) {
     const host = await waitFor(async () => (await listUserBrowserHosts()).find((entry) => entry.product.startsWith(prefix)),
       30000);
     check(`${label}the running extension announces that it blocks sites`,
-      JSON.stringify(host?.capabilities) === JSON.stringify(["blockSites", "closesAskingTabs"]),
+      JSON.stringify(host?.capabilities) === JSON.stringify(["blockSites", "closesAskingTabs", "reloadsWhenReplaced"]),
       JSON.stringify(host?.capabilities));
     await mkdir(join(localAppData, "pyproc", "userBrowser", "pairing"), { recursive: true });
     await writeFile(join(localAppData, "pyproc", "userBrowser", "pairing", `${host.profileId}.key`),

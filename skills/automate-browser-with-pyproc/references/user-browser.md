@@ -47,7 +47,7 @@ npx pyproc-control user-browser pair --browser edge
 
 The extension shows `PAIR` on its action; clicking it within two minutes pairs this user's pyproc with that browser
 profile. Automation cannot click the action for you. `user-browser status` lists the running profiles (with whether
-each is paired) and every pairing kept here (with whether its profile runs now),
+each is paired, what its extension can do, and the `pid` of the native host it started) and every pairing kept here (with whether its profile runs now),
 `user-browser unpair --browser edge` forgets the pairing on both sides, and `user-browser remove` unregisters the host
 and deletes the install.
 
@@ -121,11 +121,15 @@ the enforcer and every site before it opens anything. An extension that cannot h
 package, or not reloaded since setup replaced its folder), cannot turn prediction off, or answers anything else
 ends the session with
 `USER_BROWSER_SITE_BLOCKING_UNAVAILABLE`, and nothing opens. The extension says what it can do
-(`capabilities: ["blockSites", "closesAskingTabs"]`) in its hello, its status, and the native host's announcement, so
-`user-browser status` lists it per running profile. `closesAskingTabs` says that closing a task tab whose page asks
-before it is left (an editor with unsaved text) answers "leave" after 3 seconds, and a tab still open 3 seconds later
-is left to the user, so the ending task never waits for an answer. A running extension that does not say it was
-loaded before setup replaced its folder and needs the reload button on the browser's extensions page.
+(`capabilities: ["blockSites", "closesAskingTabs", "reloadsWhenReplaced"]`) in its hello, its status, and the native
+host's announcement, so `user-browser status` lists it per running profile. `closesAskingTabs` says that closing a task
+tab whose page asks before it is left (an editor with unsaved text) answers "leave" after 3 seconds, and a tab still open
+3 seconds later is left to the user, so the ending task never waits for an answer. A running extension that says less than the
+installed package was loaded before setup replaced its folder and needs the reload button on the browser's extensions page; the browser
+keeps running that old code even after it restarts. `reloadsWhenReplaced` says the extension reloads itself within
+about 15 seconds once setup installed another version in its folder, but only while no control host is connected and
+no task window, pairing, or site rule is open, and once per installed version; it keeps its pairing. Developer mode,
+which loading the folder needs, has to stay on: the browser lets an unpacked extension reload itself only then.
 
 A start URL on a blocked site is refused before anything is sent, and a start page sent there while it opens (by a
 redirect, a script, or a meta refresh) opens no tab, also on a host that keeps tabs that leave its origins: both fail
