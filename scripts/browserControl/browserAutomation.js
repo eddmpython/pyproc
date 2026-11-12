@@ -68,6 +68,9 @@ export const BROWSER_AUTOMATION_ERROR_CODES = Object.freeze({
 const WAIT_POLL_MS = 100;
 const MAX_REPORTED_REQUEST_IDS = 16;
 const TEXT_LIMIT = 500;
+// An editable field holds what the caller typed, and the caller compares it whole before submitting (a site may cut
+// a long caption only after posting). Its value and fill range are read to this length; other text stays at TEXT_LIMIT.
+const EDIT_TEXT_LIMIT = 10000;
 const STORAGE_VALUE_LIMIT = 10000;
 const AX_STATES = new Set([
   "checked", "disabled", "editable", "expanded", "focused", "level", "pressed", "readonly", "required", "selected",
@@ -304,23 +307,17 @@ function domFillTargets(snapshot, editableNodes) {
     const nodes = document.nodes;
     if (!nodes) continue;
     const size = nodes.nodeType?.length || 0;
-    const contents = Array(size).fill("");
     const lengths = new Float64Array(size);
     const elements = new Uint32Array(size);
     const shadow = new Uint8Array(size);
     for (const index of nodes.shadowRootType?.index || []) shadow[index] = 1;
     for (let index = size - 1; index >= 0; index -= 1) {
-      if (nodes.nodeType[index] === 3 || nodes.nodeType[index] === 4) {
-        const value = text(nodes.nodeValue?.[index]);
-        contents[index] = value.slice(0, TEXT_LIMIT);
-        lengths[index] = value.length;
-      }
+      if (nodes.nodeType[index] === 3 || nodes.nodeType[index] === 4) lengths[index] = text(nodes.nodeValue?.[index]).length;
       const parent = nodes.parentIndex?.[index];
       if (!Number.isInteger(parent) || parent < 0 || parent >= index) continue;
       // Snapshot includes shadow/template trees and child documents. Their text is not the host's textContent.
       if (nodes.nodeType[index] === 11 || nodes.nodeType[index] === 9) continue;
       shadow[parent] ||= shadow[index];
-      contents[parent] = (contents[index] + contents[parent]).slice(0, TEXT_LIMIT);
       lengths[parent] += lengths[index];
       elements[parent] += elements[index] + (nodes.nodeType[index] === 1 ? 1 : 0);
     }
@@ -336,12 +333,37 @@ function domFillTargets(snapshot, editableNodes) {
       targets.set(backendNodeId, Object.freeze({
         fillTag: tag,
         fillScope: valueField ? "value" : "elementContents",
-        ...(!valueField ? { fillText: contents[at], fillTextStatus: lengths[at] <= TEXT_LIMIT ? "complete" : "truncated",
-          fillElements: elements[at] } : {}),
+        ...(!valueField ? { fillText: elementText(nodes, at, text),
+          fillTextStatus: lengths[at] <= EDIT_TEXT_LIMIT ? "complete" : "truncated", fillElements: elements[at] } : {}),
       }));
     }
   }
   return targets;
+}
+
+// The text of one element in document order, up to EDIT_TEXT_LIMIT. DOMSnapshot lists a subtree right after its root,
+// so the walk ends at the first node whose parent is outside it. Template contents and child documents are skipped
+// as in domFillTargets; an element holding a shadow root is never read here.
+function elementText(nodes, at, text) {
+  const inside = new Set([at]);
+  const skipped = new Set();
+  const size = nodes.nodeType?.length || 0;
+  let out = "";
+  for (let index = at + 1; index < size && out.length < EDIT_TEXT_LIMIT; index += 1) {
+    const parent = nodes.parentIndex?.[index];
+    if (skipped.has(parent)) {
+      skipped.add(index);
+      continue;
+    }
+    if (!inside.has(parent)) break;
+    if (nodes.nodeType[index] === 11 || nodes.nodeType[index] === 9) {
+      skipped.add(index);
+      continue;
+    }
+    inside.add(index);
+    if (nodes.nodeType[index] === 3 || nodes.nodeType[index] === 4) out += text(nodes.nodeValue?.[index]);
+  }
+  return out.slice(0, EDIT_TEXT_LIMIT);
 }
 
 function sameRect(left, right) {
@@ -886,7 +908,8 @@ export class BrowserAutomation {
         if (node.ignored) continue;
         const role = clipped(remoteValue(node.role));
         const name = clipped(remoteValue(node.name));
-        const value = clipped(remoteValue(node.value));
+        const editable = node.properties?.some((property) => property.name === "editable" && remoteValue(property.value));
+        const value = clipped(remoteValue(node.value), editable ? EDIT_TEXT_LIMIT : TEXT_LIMIT);
         const description = clipped(remoteValue(node.description));
         if (!role && !name && !value && !description) continue;
         const compact = { role: role || "unknown" };

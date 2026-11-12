@@ -71,8 +71,12 @@
       </div>
       <div contenteditable="true" role="textbox" aria-label="Range editor">
         <p>Left <strong>middle</strong> right</p>
-        <p id="long-range"></p>
+        <p id="long-range" style="white-space: nowrap; overflow: hidden"></p>
         <span contenteditable="false">Read-only range text</span>
+      </div>
+      <div contenteditable="true" role="textbox" aria-label="Caption editor">
+        <p id="caption-head" style="white-space: nowrap; overflow: hidden"></p>
+        <p>#끝태그</p>
       </div>
       <div id="shadow-range" contenteditable="true" role="textbox" aria-label="Shadow range editor">Light range text</div>
       <div id="late-editor-noise"></div>
@@ -115,7 +119,8 @@
     const structuredEditor = document.getElementById("structured-editor");
     const structuredEditorState = document.getElementById("structured-editor-state");
     const paragraphEditor = document.getElementById("paragraph-editor");
-    document.getElementById("long-range").textContent = "Long range ".repeat(80);
+    document.getElementById("long-range").textContent = "Long range ".repeat(1000);
+    document.getElementById("caption-head").textContent = "선재도 워킹낚시 ".repeat(120);
     document.getElementById("shadow-range").attachShadow({ mode: "open" }).innerHTML
       = "<span>Shadow range text</span><slot></slot>";
     let paragraphClicked = false;

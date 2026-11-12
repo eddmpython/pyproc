@@ -579,10 +579,12 @@ element's contents are selected, preserving adjacent elements, images, and embed
 The legacy semantic snapshot preserves Chromium's `states.editable` (`plaintext` or `richtext`). A full read
 (`mode: "all"`) also describes the resolved fill target in `states`: `fillTag` names its tag and `fillScope`
 is `value` for an input or textarea, or `elementContents` for an editable element. For `elementContents`,
-`fillText` previews that element's DOM text content, including other text runs in the same element, up to
-500 characters. `fillTextStatus` is `complete` or `truncated`; only `complete` describes the whole text.
+`fillText` holds that element's DOM text content, including other text runs in the same element, up to
+10000 characters. `fillTextStatus` is `complete` or `truncated`; only `complete` describes the whole text.
 `fillElements` counts descendant elements inside that range, including pictures or links with no text.
-An input or textarea uses its existing accessibility `value`; it has no `fillText` preview.
+An input or textarea uses its existing accessibility `value`; it has no `fillText`. The `value` of any
+editable node is also read up to 10000 characters (other text stays at 500), so a caller can compare a
+typed caption or description whole before it submits.
 
 These details apply to that snapshot's opaque locator, not to another selector or a later page state.
 They are omitted for interactive reads, separately hosted frames, and flattened shadow trees whose DOM

@@ -365,8 +365,16 @@ try {
   check("문단의 다른 글자와 요소까지 실제 바뀔 범위에 포함하고 잘린 글은 구별",
     mixedNode?.states?.fillTag === "p" && mixedNode.states.fillText === "Left middle right"
       && mixedNode.states.fillElements === 1 && mixedNode.states.fillTextStatus === "complete"
-      && longNode?.states?.fillText.length === 500 && longNode.states.fillTextStatus === "truncated"
-      && fixedNode && !fixedNode.states?.fillScope, JSON.stringify({ mixed: mixedNode?.states, long: longNode?.states }));
+      && longNode?.states?.fillText.length === 10000 && longNode.states.fillTextStatus === "truncated"
+      && fixedNode && !fixedNode.states?.fillScope, JSON.stringify({ mixed: mixedNode?.states, long: { ...longNode?.states, fillText: longNode?.states?.fillText?.length } }));
+  const captionText = "선재도 워킹낚시 ".repeat(120);
+  const captionEditor = sameFrameObserved.result?.nodes?.find((node) => node.name === "Caption editor");
+  check("편집 칸의 값과 글 범위는 500자를 넘어도 끝까지 읽어 붙여 넣은 글 전체를 견줄 수 있음",
+    captionEditor?.states?.fillText.includes(captionText) && captionEditor.states.fillText.trim().endsWith("#끝태그")
+      && captionEditor.states.fillTextStatus === "complete"
+      && captionEditor.value?.endsWith("#끝태그") && captionEditor.value.length > 1000,
+  JSON.stringify({ value: captionEditor?.value?.slice(-40), length: captionEditor?.value?.length,
+    status: captionEditor?.states?.fillTextStatus }));
   const frameParagraph = sameFrameObserved.result?.nodes?.find((node) =>
     node.role === "StaticText" && node.name === "Frame paragraph");
   const nativeTitle = sameFrameObserved.result?.nodes?.find((node) => node.role === "textbox" && node.name === "Title");
