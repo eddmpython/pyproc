@@ -12,7 +12,17 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.46 - 2026-11-12
+
 ### Fixed
+
+- **A page read gives an editable field's whole text.** The value and the fill text of an editable field are read up
+  to 10,000 characters instead of 500, so a caller compares a long caption it typed before submitting it; other text
+  on the page stays cut at 500. The fill text of a field is its own subtree in document order, so a large page does
+  not hold more memory.
+
+  한국어: 화면 읽기가 편집 칸의 값과 칸 안의 글을 500자가 아니라 10,000자까지 준다. 긴 캡션을 넣은 쪽이 올리기 전에 칸의
+  글 전체를 견줄 수 있다. 다른 글은 그대로 500자에서 자른다.
 
 - **The User Browser extension runs the version setup installed without a reload by hand.** The browser keeps running
   the extension code it loaded, also after setup replaced the folder and after the browser restarted (a Chrome restarted
