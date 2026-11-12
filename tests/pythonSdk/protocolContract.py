@@ -1,5 +1,7 @@
 """Installed Python codec positive and negative contract fixtures."""
 
+import hashlib
+import hmac
 import json
 import socket
 import tempfile
@@ -300,34 +302,64 @@ def raised(operation):
     return None
 
 
-# A host that waits for its client: the token is the first line, then the usual hello on the same connection.
+# A host that waits for its client never listens: the returning client listens and announces itself beside the endpoint
+# file, the host comes to it and proves itself without putting a token on the connection, and the client answers with
+# the token it announced. The usual hello follows on the same connection.
 assert isinstance(raised(lambda: PyProcClient.start("unused.json", reconnectSeconds=5.0)), ValueError)
-with tempfile.TemporaryDirectory() as reconnectFolder, socket.create_server(("127.0.0.1", 0)) as waitingHost:
+with tempfile.TemporaryDirectory() as reconnectFolder:
     reconnectFile = Path(reconnectFolder) / "endpoint.json"
-    endpoint = {"schemaVersion": 1, "pid": 4242, "port": waitingHost.getsockname()[1], "token": "fixture-token",
+    announcementFile = Path(reconnectFolder) / "endpoint.json.client"
+    endpoint = {"schemaVersion": 1, "pid": 4242, "token": "fixture-token",
                 "expiresAtMs": int(time.time() * 1000) + 60_000}
 
-    def reconnectError(written):
+    def reconnectError(written, startupTimeout=5.0):
         reconnectFile.write_text(json.dumps(written), encoding="utf-8")
-        return raised(lambda: PyProcClient.reconnect(reconnectFile, startupTimeout=5.0))
+        return raised(lambda: PyProcClient.reconnect(reconnectFile, startupTimeout=startupTimeout))
 
     assert isinstance(raised(lambda: PyProcClient.reconnect(Path(reconnectFolder) / "absent.json")), FileNotFoundError)
     assert isinstance(reconnectError({**endpoint, "schemaVersion": 2}), ValueError)
-    assert isinstance(reconnectError({**endpoint, "port": "1"}), ValueError)
+    assert isinstance(reconnectError({**endpoint, "pid": "4242"}), ValueError)
+    assert isinstance(reconnectError({**endpoint, "token": "토큰"}), ValueError)
     assert isinstance(reconnectError({key: endpoint[key] for key in endpoint if key != "token"}), ValueError)
+    # A wait that is over is not waited on.
+    startedAt = time.monotonic()
     assert isinstance(reconnectError({**endpoint, "expiresAtMs": 1}), ConnectionError)
+    assert time.monotonic() - startedAt < 2.0 and not announcementFile.exists()
+    # No host comes: the client stops within its timeout and leaves no announcement behind.
+    startedAt = time.monotonic()
+    assert isinstance(reconnectError(endpoint, startupTimeout=0.3), ConnectionError)
+    assert time.monotonic() - startedAt < 3.0 and not announcementFile.exists()
     waitingHostSaw = {}
 
     def waitingHostLoop():
-        accepted, _address = waitingHost.accept()
-        with accepted, accepted.makefile("r", encoding="utf-8", newline="\n") as lines:
-            waitingHostSaw["firstLine"] = lines.readline()
+        deadline = time.monotonic() + 5.0
+        announced = None
+        while announced is None and time.monotonic() < deadline:
+            try:
+                announced = json.loads(announcementFile.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                time.sleep(0.01)
+        waitingHostSaw["announced"] = sorted(announced)
+        waitingHostSaw["announcedToken"] = announced["token"]
+        address = ("127.0.0.1", announced["port"])
+        # Some other local process reaches the port first. Whatever it sends, even the endpoint token, it is not the
+        # host: the client closes it without a byte and keeps accepting.
+        for strangerLine in (b"fixture-token\n" + b"0" * 51, b"0" * 64 + b"\n"):
+            with socket.create_connection(address, timeout=5.0) as stranger:
+                stranger.sendall(strangerLine)
+                waitingHostSaw.setdefault("strangersGot", []).append(stranger.recv(4096))
+        proof = hmac.new(announced["token"].encode("ascii"), announced["clientToken"].encode("ascii"),
+                         hashlib.sha256).hexdigest()
+        with socket.create_connection(address, timeout=5.0) as dialed, \
+                dialed.makefile("r", encoding="utf-8", newline="\n") as lines:
+            dialed.sendall(proof.encode("ascii") + b"\n")
+            waitingHostSaw["answeredWithItsToken"] = lines.readline() == announced["clientToken"] + "\n"
             hello = decodeFrame(lines.readline())
             waitingHostSaw["helloRole"] = hello["role"]
-            accepted.sendall(encodeFrame({**controlBase("hello"), "requestId": hello["requestId"], "role": "server",
-                                          "peer": {"name": "fixture-host", "version": "1"},
-                                          "capabilities": hello["capabilities"],
-                                          "operations": ["automation.observe"]}).encode("utf-8"))
+            dialed.sendall(encodeFrame({**controlBase("hello"), "requestId": hello["requestId"], "role": "server",
+                                        "peer": {"name": "fixture-host", "version": "1"},
+                                        "capabilities": hello["capabilities"],
+                                        "operations": ["automation.observe"]}).encode("utf-8"))
             waitingHostSaw["afterClose"] = lines.readline()
 
     waitingHostThread = threading.Thread(target=waitingHostLoop, daemon=True)
@@ -336,9 +368,12 @@ with tempfile.TemporaryDirectory() as reconnectFolder, socket.create_server(("12
     returned = PyProcClient.reconnect(reconnectFile, startupTimeout=5.0)
     assert returned.connected is True and returned.process is None and returned.hostPid == 4242
     assert returned.operations == ("automation.observe",)
+    assert not announcementFile.exists(), "the announcement outlived the return"
     returned.close()
     waitingHostThread.join(5.0)
     assert returned.connected is False
-    assert waitingHostSaw == {"firstLine": "fixture-token\n", "helloRole": "client", "afterClose": ""}, waitingHostSaw
+    assert waitingHostSaw == {"announced": ["clientToken", "port", "schemaVersion", "token"],
+                              "announcedToken": "fixture-token", "strangersGot": [b"", b""],
+                              "answeredWithItsToken": True, "helloRole": "client", "afterClose": ""}, waitingHostSaw
 
 print("python sdk protocol contract green: 23 fixtures")

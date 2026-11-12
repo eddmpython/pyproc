@@ -16,8 +16,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 - **A control client can come back to the same host and its browser sessions.** `pyproc-control --config <file>
   --reconnect <file> [--reconnect-ms <n>]` keeps a host alive when it loses its client while automation sessions are
-  attached. It cancels the requests of the lost connection, listens on a loopback port, and writes an endpoint file
-  with a one-time token; the connection whose first line is that token becomes the client and uses the same
+  attached. It cancels the requests of the lost connection and writes an endpoint file with a one-time token. The
+  waiting host still opens no listener: the returning client listens on loopback and announces its port beside that
+  file with the token and a token of its own, the host connects to that port, proves itself without sending either
+  token, and takes the connection as its client once the client answers with its own token. That client uses the same
   `targetRef` and `sessionRef` values after a new `hello`. A host that holds no session, or whose wait (60 seconds by
   default, 30 minutes at most) runs out, ends as before. A host started without the option changes in one way: bytes
   after the last newline when its input ends are dropped as the unfinished write of a lost client, where they used
@@ -25,15 +27,18 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   it to outlive that program. The Python SDK adds `PyProcClient.start(reconnectFile=, reconnectSeconds=)`, `PyProcClient.reconnect(file)`, `hostPid`,
   and `connected`. The JavaScript SDK has no helper for returning yet; the wire contract is in the Control Protocol
   reference. The manifest's origins, actions, risk ceiling, and request guard are those of the host and do not
-  change with the client. Gate: `test:contracts` (control reconnect: a wrong, short, or oversized first line is
-  refused while the host keeps waiting, an unfinished last line does not end a host that holds a session, the wait
-  is bounded, the endpoint file is removed), `test:control-product`
-  (an installed host and a real browser: stdin closes, the same session answers over the socket), `test:python-sdk`
-  (the bundled host and `PyProcClient.reconnect`).
+  change with the client. Gate: `test:contracts` (control reconnect: an announcement without the token of the wait
+  is removed and not followed, the first line of the host carries no token, a connection whose answer is wrong,
+  short, or oversized is closed while the host keeps waiting, an unfinished last line does not end a host that holds
+  a session, the wait is bounded, the endpoint file is removed), `test:control-product` (an installed host and a
+  real browser: stdin closes, the waiting host and its browser own no listening socket, the same session answers
+  over the connection the host made), `test:python-sdk` (the bundled host and `PyProcClient.reconnect`).
 
   한국어: 제어하던 프로그램이 죽어도 host와 브라우저 세션이 살아 있고, 다시 뜬 프로그램이 같은 세션으로 돌아온다.
-  `--reconnect <파일>`로 띄운 host는 세션이 붙어 있는 동안 client를 잃으면 그 연결의 요청을 끝내고, 이 PC 안에서만
-  닿는 포트를 열어 주소와 한 번 쓰는 token을 그 파일에 적는다. 첫 줄로 그 token을 보낸 연결만 client가 되어 전에 받은
+  `--reconnect <파일>`로 띄운 host는 세션이 붙어 있는 동안 client를 잃으면 그 연결의 요청을 끝내고 한 번 쓰는
+  token을 그 파일에 적는다. 기다리는 host는 접속을 받는 포트를 열지 않는다. 돌아온 client가 이 PC 안에서만 닿는
+  포트를 열어 그 token과 자기 token을 파일 옆에 알리면, host가 그 포트로 가서 두 token을 보내지 않고 자신이 그
+  host임을 증명하고, client가 자기 token으로 답해야 그 연결을 client로 삼는다. 그 client는 전에 받은
   `targetRef`·`sessionRef`를 그대로 쓴다. 세션이 없거나 기다리는 시간(기본 60초, 최대 30분)이 지나면 전처럼 끝난다.
   이 옵션 없이 띄운 host는 한 가지만 달라진다: 입력이 끝날 때 줄바꿈 없이 남은 마지막 줄을 잘못된 프레임으로 보지
   않고 버린다(전에는 fatal 프레임을 쓰고 1로 끝났다). Windows에서 Node.js 프로그램은 host를 `detached: true`로

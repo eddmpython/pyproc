@@ -381,15 +381,21 @@ client = PyProcClient.reconnect("state/reconnect.json")
 client.observe(sessionRef, {"expectedRisk": "read"})
 ```
 
-`reconnect` raises `FileNotFoundError` or `ConnectionError` when no host waits there, and `ValueError` when the
-file is not an endpoint; open a new host in that case. The returned client has no `process`; `hostPid` is the
-process ID of the host and `connected` turns false once the connection is closed or lost. Requests that were in
-flight when the first client was lost ended with it, so treat an effect it had sent as `outcomeUnknown`.
+The waiting host does not listen. `reconnect` listens on a loopback port, announces it beside the file, and the
+host connects to it within `startupTimeout` seconds, so both processes need to read and write the directory of
+the file. The Control Protocol reference has the exchange.
+
+`reconnect` raises `FileNotFoundError` or `ConnectionError` when no host waits there or none comes in time, and
+`ValueError` when the file is not an endpoint; open a new host in that case. The returned client has no
+`process`; `hostPid` is the process ID of the host and `connected` turns false once the connection is closed or
+lost. Requests that were in flight when the first client was lost ended with it, so treat an effect it had sent
+as `outcomeUnknown`.
 
 `close()` ends the host at once only when no session is attached, so detach the sessions first. With a session
 still attached, the client that started the host stops it after the close timeout, and a host left by a client
-that had returned to it waits until its time runs out. The file holds a secret token: keep it in a directory only
-the owning user can read and never log it. The wire contract is in
+that had returned to it waits until its time runs out. The file and the announcement beside it hold secret
+tokens: keep them in a directory only the owning user can read and write, and never log them. The wire contract
+is in
 [Control Protocol](./control-protocol.md#connection-contract).
 
 ## Distribution verification

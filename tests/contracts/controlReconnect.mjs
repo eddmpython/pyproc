@@ -1,6 +1,6 @@
 import { once } from "node:events";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { connect } from "node:net";
+import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -12,12 +12,17 @@ import {
   CONTROL_RECONNECT_SCHEMA_VERSION,
   ControlServer,
   applyControlReconnectEnvironment,
+  controlReconnectAnnouncement,
   controlReconnectFromEnvironment,
   controlReconnectOptions,
+  controlReconnectProof,
 } from "../../scripts/controlProtocol/controlServer.mjs";
 import { controlRequest as request, wirePeer, within as wireWithin } from "../support/controlWire.mjs";
 
 const STEP_MS = 5_000;
+// Long enough for a waiting host to look at an announcement and go to its port, had it meant to.
+const QUIET_MS = 400;
+const CLIENT_TOKEN = "c".repeat(43);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -29,6 +34,7 @@ function errorOf(operation) {
 }
 
 const within = (promise, what, ms = STEP_MS) => wireWithin(promise, what, ms);
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function until(probe, what) {
   const deadline = Date.now() + STEP_MS;
@@ -36,7 +42,7 @@ async function until(probe, what) {
     const value = await probe();
     if (value) return value;
     if (Date.now() > deadline) throw new Error(`${what}: ${STEP_MS}ms 안에 일어나지 않았다`);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await pause(10);
   }
 }
 
@@ -69,30 +75,80 @@ function serverOf({ reconnect = null, holds = () => false } = {}) {
   return { server, ended, aborted, input, output, peer: wirePeer(output, input, { stepMs: STEP_MS }) };
 }
 
-async function endpointOf(file) {
-  return until(async () => {
-    try { return JSON.parse(await readFile(file, "utf8")); }
-    catch (error) { return null; }
-  }, "돌아올 곳 파일");
-}
+const endpointOf = (file) => until(async () => {
+  try { return JSON.parse(await readFile(file, "utf8")); }
+  catch (error) { return null; }
+}, "돌아올 곳 파일");
 
-const fileGone = (file) => until(async () => {
+const fileGone = (file, what = "돌아올 곳 파일 지우기") => until(async () => {
   try { await readFile(file); return false; }
   catch (error) { return error.code === "ENOENT"; }
-}, "돌아올 곳 파일 지우기");
+}, what);
 
-/** Connect to a waiting host and show `token`; resolves with the socket and its peer. */
-async function comeBack(port, token) {
-  const socket = connect({ host: "127.0.0.1", port });
-  socket.on("error", () => {});
-  await within(once(socket, "connect"), "다시 붙는 연결");
-  socket.write(`${token}\n`);
-  return { socket, peer: wirePeer(socket, socket, { stepMs: STEP_MS }) };
+/** A loopback listener, as a returning client opens one. `next` resolves with the next connection made to it. */
+async function listenOnLoopback() {
+  const server = createServer();
+  const arrived = [];
+  const waiters = [];
+  server.on("connection", (socket) => {
+    socket.on("error", () => {});
+    const waiter = waiters.shift();
+    if (waiter) waiter(socket); else arrived.push(socket);
+  });
+  server.listen({ host: "127.0.0.1", port: 0 });
+  await once(server, "listening");
+  return {
+    port: server.address().port,
+    next: (what) => arrived.length ? Promise.resolve(arrived.shift())
+      : within(new Promise((resolve) => waiters.push(resolve)), what),
+    /** True when the host made no connection that nobody took, now or within the quiet time. */
+    async stayedQuiet() {
+      await pause(QUIET_MS);
+      return arrived.length === 0;
+    },
+    close() {
+      server.close();
+      for (const socket of arrived.splice(0)) socket.destroy();
+    },
+  };
 }
 
-async function refused(port, token, what) {
-  const { socket } = await comeBack(port, token);
-  if (!socket.destroyed) await within(once(socket, "close"), what);
+const announcementOf = (endpoint, port, changes = {}) =>
+  ({ schemaVersion: CONTROL_RECONNECT_SCHEMA_VERSION, port, token: endpoint.token, clientToken: CLIENT_TOKEN, ...changes });
+
+/** Put `announced` beside `file` in one step, as a returning client does. */
+async function announce(file, announced) {
+  const path = controlReconnectAnnouncement(file);
+  await writeFile(`${path}.draft`, typeof announced === "string" ? announced : JSON.stringify(announced));
+  await rename(`${path}.draft`, path);
+}
+
+/**
+ * Announce `listener` to the host that waits with `file`; resolves with the host's connection once its first line
+ * proved it: made from both tokens, carrying neither.
+ */
+async function hostComesTo(listener, file, endpoint) {
+  await announce(file, announcementOf(endpoint, listener.port));
+  const socket = await listener.next("호스트가 돌아온 클라이언트로 오는 연결");
+  const [first] = await within(once(socket, "data"), "호스트의 첫 줄");
+  const shown = String(first);
+  assert(shown === `${controlReconnectProof(endpoint.token, CLIENT_TOKEN)}\n`,
+    "호스트의 첫 줄이 두 토큰으로 만든 증명이 아니다");
+  assert(!shown.includes(endpoint.token) && !shown.includes(CLIENT_TOKEN), "호스트가 토큰을 연결에 실었다");
+  return socket;
+}
+
+/** Come back to the host that waits with `file` the way a client does: listen, announce, answer the proven host. */
+async function comeBack(file) {
+  const endpoint = await endpointOf(file);
+  const listener = await listenOnLoopback();
+  try {
+    const socket = await hostComesTo(listener, file, endpoint);
+    socket.write(`${CLIENT_TOKEN}\n`);
+    return { socket, endpoint, peer: wirePeer(socket, socket, { stepMs: STEP_MS }) };
+  } finally {
+    listener.close();
+  }
 }
 
 async function assertOptions() {
@@ -117,6 +173,7 @@ async function assertOptions() {
   applyControlReconnectEnvironment(controlReconnectOptions({ file, windowMs: "250" }), env);
   const carried = controlReconnectFromEnvironment(env);
   assert(carried.file === file && carried.windowMs === 250, "다시 붙기 옵션이 서버 모듈로 전해지지 않는다");
+  assert(controlReconnectAnnouncement(file) === `${file}.client`, "돌아온 클라이언트가 알리는 파일의 자리가 계약과 다르다");
 }
 
 async function assertEndsWithItsClient(root) {
@@ -147,15 +204,75 @@ async function assertEndsWithItsClient(root) {
   assert(broken.ended.join() === "1", "프로토콜 위반이 1로 끝나지 않는다");
 }
 
+/** The host goes to no port that was not announced, whole, together with the token of its wait. */
+async function assertOnlyItsAnnouncementIsFollowed(file, endpoint, server) {
+  const listener = await listenOnLoopback();
+  try {
+    const good = announcementOf(endpoint, listener.port);
+    const withoutClientToken = { ...good };
+    delete withoutClientToken.clientToken;
+    for (const [what, announced] of [
+      ["틀린 토큰", { ...good, token: "x".repeat(endpoint.token.length) }],
+      ["짧은 토큰", { ...good, token: endpoint.token.slice(0, -1) }],
+      ["다른 schemaVersion", { ...good, schemaVersion: CONTROL_RECONNECT_SCHEMA_VERSION + 1 }],
+      ["숫자가 아닌 port", { ...good, port: String(listener.port) }],
+      ["범위 밖 port", { ...good, port: 65_536 }],
+      ["clientToken 없음", withoutClientToken],
+      ["짧은 clientToken", { ...good, clientToken: "c".repeat(31) }],
+      ["줄바꿈이 든 clientToken", { ...good, clientToken: `${"c".repeat(40)}\n${"c".repeat(40)}` }],
+      ["JSON이 아닌 글", "not an announcement"],
+      ["너무 긴 글", JSON.stringify({ ...good, padding: "x".repeat(8 * 1024) })],
+    ]) {
+      await announce(file, announced);
+      // Read once: the host removes what it does not follow, so nothing stale is left to be followed later.
+      await fileGone(controlReconnectAnnouncement(file), `${what}: 알림 파일 지우기`);
+      assert(await listener.stayedQuiet(), `${what}: 호스트가 받아들이면 안 되는 알림의 port로 갔다`);
+    }
+    assert(server.ended.length === 0, "따르지 않은 알림 때문에 호스트가 기다리기를 그만뒀다");
+  } finally {
+    listener.close();
+  }
+}
+
+/** A connection that does not answer with the announced client's token is not the client; the wait goes on. */
+async function assertOnlyTheAnnouncedClientIsTaken(file, endpoint, server) {
+  // Nobody listens at the announced port.
+  const vacated = await listenOnLoopback();
+  vacated.close();
+  await announce(file, announcementOf(endpoint, vacated.port));
+  await fileGone(controlReconnectAnnouncement(file), "아무도 없는 port의 알림 지우기");
+  await pause(QUIET_MS);
+  assert(server.ended.length === 0, "아무도 없는 port로 갔던 호스트가 끝났다");
+
+  const listener = await listenOnLoopback();
+  try {
+    for (const [what, answer] of [["틀린 답", `${"x".repeat(CLIENT_TOKEN.length)}\n`],
+      ["짧은 답", `${CLIENT_TOKEN.slice(0, -1)}\n`], ["돌아올 곳 파일의 토큰으로 한 답", `${endpoint.token}\n`],
+      ["줄 없이 큰 답", "x".repeat(80 * 1024)]]) {
+      const socket = await hostComesTo(listener, file, endpoint);
+      socket.write(answer);
+      // Sooner than the time a client has to answer: the answer alone refuses it.
+      if (!socket.destroyed) await within(once(socket, "close"), `${what}: 호스트가 연결을 닫기`, 2_000);
+      // One announcement, one connection: the host does not come again for it.
+      assert(await listener.stayedQuiet(), `${what}: 호스트가 같은 알림으로 다시 왔다`);
+      assert(server.ended.length === 0, `${what}: 클라이언트가 아닌 연결 때문에 호스트가 끝났다`);
+    }
+  } finally {
+    listener.close();
+  }
+  // No connection was shown a token, so the wait still offers the one it wrote.
+  assert((await endpointOf(file)).token === endpoint.token, "클라이언트가 아닌 연결 뒤에 돌아올 곳 파일이 바뀌었다");
+}
+
 async function assertClientComesBack(root) {
   const file = join(root, "held.json");
   let held = true;
-  const first = serverOf({ reconnect: controlReconnectOptions({ file, windowMs: "20000" }), holds: () => held });
+  const first = serverOf({ reconnect: controlReconnectOptions({ file, windowMs: "30000" }), holds: () => held });
   await first.peer.greet("hello:first");
   first.peer.send(request("held:1", "machine.run", { code: "first" }));
   assert((await first.peer.next("response")).output.value === "first", "첫 연결의 요청이 응답되지 않는다");
   first.peer.send(request("held:2", "automation.act", { actions: [] }));
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await pause(20);
   const lostAt = Date.now();
   first.input.end();
 
@@ -164,29 +281,20 @@ async function assertClientComesBack(root) {
   assert(stopped?.type === "error" && stopped.requestId === "held:2", "끊긴 연결의 요청이 그 연결에서 끝나지 않았다");
   assert(first.aborted.join() === "control client was lost", "끊긴 연결의 요청이 취소되지 않았다");
 
+  // The endpoint names no port: the waiting host listens nowhere.
   const endpoint = await endpointOf(file);
   assert(endpoint.schemaVersion === CONTROL_RECONNECT_SCHEMA_VERSION && endpoint.pid === process.pid
-    && Number.isInteger(endpoint.port) && endpoint.port > 0
     && typeof endpoint.token === "string" && endpoint.token.length >= 43
-    && endpoint.expiresAtMs > lostAt && endpoint.expiresAtMs <= Date.now() + 20_000
-    && Object.keys(endpoint).sort().join() === "expiresAtMs,pid,port,schemaVersion,token",
+    && endpoint.expiresAtMs > lostAt && endpoint.expiresAtMs <= Date.now() + 30_000
+    && Object.keys(endpoint).sort().join() === "expiresAtMs,pid,schemaVersion,token",
   "돌아올 곳 파일의 모양이 계약과 다르다");
   assert(first.ended.length === 0, "세션을 쥔 호스트가 클라이언트를 잃자 끝났다");
 
-  // Only the token opens the host; a refused connection leaves it waiting.
-  await refused(endpoint.port, "x".repeat(endpoint.token.length), "틀린 토큰 거절");
-  await refused(endpoint.port, endpoint.token.slice(0, -1), "짧은 토큰 거절");
-  const flood = connect({ host: "127.0.0.1", port: endpoint.port });
-  flood.on("error", () => {});
-  await within(once(flood, "connect"), "큰 첫 줄 연결");
-  flood.write("x".repeat(80 * 1024));
-  // Sooner than the time a connection has to show its token: the size alone refuses it.
-  if (!flood.destroyed) await within(once(flood, "close"), "토큰 없이 큰 첫 줄 거절", 2_000);
-  assert((await endpointOf(file)).token === endpoint.token && first.ended.length === 0,
-    "거절한 연결 때문에 호스트가 기다리기를 그만뒀다");
+  await assertOnlyItsAnnouncementIsFollowed(file, endpoint, first);
+  await assertOnlyTheAnnouncedClientIsTaken(file, endpoint, first);
 
   // The returning client starts its own connection: a new hello and its own request IDs.
-  const second = await comeBack(endpoint.port, endpoint.token);
+  const second = await comeBack(file);
   await second.peer.greet("hello:second");
   second.peer.send(request("held:1", "machine.run", { code: "second" }));
   const again = await second.peer.next("돌아온 연결의 응답");
@@ -194,18 +302,25 @@ async function assertClientComesBack(root) {
     "돌아온 클라이언트가 앞 연결이 쓴 요청 ID를 다시 쓰지 못한다");
   assert(second.peer.unread() === 0, "앞 연결의 terminal이 돌아온 클라이언트에게 갔다");
   await fileGone(file);
-  const late = connect({ host: "127.0.0.1", port: endpoint.port });
-  const lateError = await within(Promise.race([once(late, "error").then(([error]) => error),
-    once(late, "connect").then(() => null)]), "클라이언트가 붙은 뒤의 연결");
-  late.destroy();
-  assert(lateError?.code === "ECONNREFUSED", "클라이언트가 붙은 뒤에도 호스트가 연결을 받는다");
 
-  // Losing that client too opens a new wait with a new token.
-  second.socket.destroy();
-  const next = await endpointOf(file);
-  assert(next.token !== endpoint.token && first.ended.length === 0, "두 번째로 잃은 뒤 새 토큰으로 기다리지 않는다");
-  await refused(next.port, endpoint.token, "지난 토큰 거절");
-  const third = await comeBack(next.port, next.token);
+  // A host that has its client looks at no announcement.
+  const late = await listenOnLoopback();
+  try {
+    await announce(file, announcementOf(second.endpoint, late.port));
+    assert(await late.stayedQuiet(), "클라이언트가 붙은 뒤에도 호스트가 알림을 따른다");
+    assert(JSON.parse(await readFile(controlReconnectAnnouncement(file), "utf8")).port === late.port,
+      "클라이언트가 붙은 호스트가 알림 파일을 건드렸다");
+
+    // Losing that client too opens a new wait with a new token; what was announced before it is not followed.
+    second.socket.destroy();
+    const next = await endpointOf(file);
+    assert(next.token !== second.endpoint.token && first.ended.length === 0, "두 번째로 잃은 뒤 새 토큰으로 기다리지 않는다");
+    await fileGone(controlReconnectAnnouncement(file), "앞 기다림의 알림 지우기");
+    assert(await late.stayedQuiet(), "호스트가 앞 기다림의 토큰으로 쓴 알림을 따랐다");
+  } finally {
+    late.close();
+  }
+  const third = await comeBack(file);
   await third.peer.greet("hello:third");
 
   // Once nothing is held, a lost client ends the host.
@@ -230,10 +345,9 @@ async function assertUnfinishedFrameIsALostClient(root) {
   const cut = serverOf({ reconnect: controlReconnectOptions({ file, windowMs: "20000" }), holds: () => true });
   await cut.peer.greet("hello:cut");
   cut.input.end(unfinished);
-  const endpoint = await endpointOf(file);
-  assert(cut.ended.length === 0, "쓰다 만 프레임을 남기고 끊긴 클라이언트 때문에 세션을 쥔 호스트가 끝났다");
   // The unfinished line was never a request: the client that returns can use its ID.
-  const back = await comeBack(endpoint.port, endpoint.token);
+  const back = await comeBack(file);
+  assert(cut.ended.length === 0, "쓰다 만 프레임을 남기고 끊긴 클라이언트 때문에 세션을 쥔 호스트가 끝났다");
   await back.peer.greet("hello:back");
   back.peer.send(request("cut:1", "machine.run", { code: "back" }));
   const answer = await back.peer.next("돌아온 연결의 응답");
@@ -255,11 +369,15 @@ async function assertWaitIsBounded(root) {
   assert(bounded.ended.join() === "0" && Date.now() >= endpoint.expiresAtMs - 50,
     "아무도 돌아오지 않은 호스트가 기다리는 시간 뒤 0으로 끝나지 않는다");
   await fileGone(file);
-  const late = connect({ host: "127.0.0.1", port: endpoint.port });
-  const lateError = await within(Promise.race([once(late, "error").then(([error]) => error),
-    once(late, "connect").then(() => null)]), "기다림이 끝난 뒤의 연결");
-  late.destroy();
-  assert(lateError?.code === "ECONNREFUSED", "기다림이 끝난 호스트가 연결을 받는다");
+  // A wait that is over follows no announcement, not even one with its own token.
+  const late = await listenOnLoopback();
+  try {
+    await announce(file, announcementOf(endpoint, late.port));
+    assert(await late.stayedQuiet(), "기다림이 끝난 호스트가 알림을 따른다");
+  } finally {
+    late.close();
+    await rm(controlReconnectAnnouncement(file), { force: true });
+  }
 }
 
 export async function assertControlReconnectContract() {

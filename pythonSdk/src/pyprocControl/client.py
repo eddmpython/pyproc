@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -46,6 +48,65 @@ def resolvedCommand(command: str | os.PathLike[str] | Sequence[str | os.PathLike
     if not values:
         raise ValueError("command must not be empty")
     return values
+
+
+# A connection to a returning client proves within this time that it is the waiting host.
+_HOST_PROOF_SECONDS = 5.0
+
+
+def _shows(candidate: socket.socket, expected: bytes, deadline: float) -> bool:
+    """True when the first bytes ``candidate`` sends, read no later than ``deadline``, are exactly ``expected``."""
+    shown = b""
+    try:
+        while len(shown) < len(expected):
+            candidate.settimeout(max(deadline - time.monotonic(), 0.001))
+            chunk = candidate.recv(len(expected) - len(shown))
+            if not chunk:
+                break
+            shown += chunk
+    except OSError:
+        return False
+    return hmac.compare_digest(shown, expected)
+
+
+def _waitingHostConnection(reconnectFile: Path, hostToken: str, timeout: float) -> socket.socket:
+    """The connection of the host that waits with ``reconnectFile``. A waiting host never listens: this side listens
+    on loopback and announces the port and a token of its own beside the file, and the host comes to it. The
+    connection is the host's once its first line is the HMAC-SHA256 of that token keyed with ``hostToken`` (lowercase
+    hex), which puts neither token on the connection; only then is it answered with this client's token, which the
+    host checks."""
+    clientToken = secrets.token_urlsafe(32)
+    announcement = reconnectFile.with_name(f"{reconnectFile.name}.client")
+    draft = announcement.with_name(f"{announcement.name}.{os.getpid()}.tmp")
+    proof = hmac.new(hostToken.encode("ascii"), clientToken.encode("ascii"), hashlib.sha256).hexdigest()
+    expected = proof.encode("ascii") + b"\n"
+    deadline = time.monotonic() + timeout
+    with socket.create_server(("127.0.0.1", 0)) as listener:
+        try:
+            with open(os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as file:
+                json.dump({"schemaVersion": 1, "port": listener.getsockname()[1], "token": hostToken,
+                           "clientToken": clientToken}, file)
+            os.replace(draft, announcement)
+            while True:
+                listener.settimeout(max(deadline - time.monotonic(), 0.001))
+                try:
+                    candidate, _address = listener.accept()
+                except socket.timeout:
+                    raise ConnectionError("pyproc-control host did not come to its returning client in time") from None
+                try:
+                    if _shows(candidate, expected, min(deadline, time.monotonic() + _HOST_PROOF_SECONDS)):
+                        candidate.settimeout(None)
+                        candidate.sendall(clientToken.encode("ascii") + b"\n")
+                        return candidate
+                except OSError:
+                    pass
+                candidate.close()
+        finally:
+            for leftover in (draft, announcement):
+                try:
+                    leftover.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 
 class ControlRequest:
@@ -204,23 +265,21 @@ class PyProcClient:
         """Become the client of a host that lost its client and waits (``start(reconnectFile=...)``).
 
         It is the same host: session references from the lost connection still address its sessions, and requests
-        that were in flight ended with that connection. Raises ``OSError`` when no host waits there
+        that were in flight ended with that connection. The host comes to this client (it never listens), within
+        ``startupTimeout``. Raises ``OSError`` when no host waits there or none comes in time
         (``FileNotFoundError``, ``ConnectionError``) and ``ValueError`` when the file is not an endpoint."""
-        endpoint = json.loads(Path(reconnectFile).read_text(encoding="utf-8"))
+        path = Path(reconnectFile)
+        endpoint = json.loads(path.read_text(encoding="utf-8"))
         if (not isinstance(endpoint, dict) or endpoint.get("schemaVersion") != 1
-                or any(type(endpoint.get(key)) is not int for key in ("pid", "port", "expiresAtMs"))
-                or not isinstance(endpoint.get("token"), str)):
+                or any(type(endpoint.get(key)) is not int for key in ("pid", "expiresAtMs"))
+                or not isinstance(endpoint.get("token"), str) or not endpoint["token"].isascii()):
             raise ValueError("pyproc-control reconnect file is not a version 1 endpoint")
         if endpoint["expiresAtMs"] <= time.time() * 1000:
             raise ConnectionError("pyproc-control host is no longer waiting for its client")
-        connection = socket.create_connection(("127.0.0.1", endpoint["port"]), timeout=startupTimeout)
+        connection = _waitingHostConnection(path, endpoint["token"], startupTimeout)
         try:
-            connection.settimeout(None)
             readable = connection.makefile("r", encoding="utf-8", errors="strict")
             writable = connection.makefile("w", encoding="utf-8", errors="strict", newline="\n")
-            # The host takes a connection only after its first line is the token it wrote to the file.
-            writable.write(endpoint["token"] + "\n")
-            writable.flush()
             return cls(readable, writable, connection=connection, hostPid=endpoint["pid"],
                        startupTimeout=startupTimeout, cancelSettleTimeout=cancelSettleTimeout,
                        eventHandler=eventHandler)

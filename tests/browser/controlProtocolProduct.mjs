@@ -715,8 +715,9 @@ try {
     JSON.stringify(machineHostListeners));
   const reconnected = await checkControlReconnect({ packageRoot, configPath: browserOnlyPath, cwd: installed.appDir,
     targetOrigin, heading: "control-ready", timeoutMs: TIMEOUT_MS });
-  check("session을 쥔 host가 client를 잃어도 살아 있고 token을 낸 client만 같은 session으로 돌아옴",
-    reconnected.hostKeptRunning && reconnected.strangerRefused && reconnected.sameSessionSeesPage
+  check("session을 쥔 host가 client를 잃어도 listen socket 없이 살아 있고 자기 token으로 알린 client에게만 가서 같은 session을 이음",
+    reconnected.hostKeptRunning && reconnected.waitingListeners.length === 0 && reconnected.endpointNamesNoPort
+      && !reconnected.wentToStranger && reconnected.hostProved && reconnected.sameSessionSeesPage
       && reconnected.endpointRemoved && reconnected.exitCode === 0 && reconnected.endpointGoneAfterExit,
     JSON.stringify(reconnected));
   await checkSecretInput(installed);

@@ -40,7 +40,7 @@ const HELP = `Usage:
 Options:
   --config <file>  Version 1 product manifest with an engine and optional automation authority
   --check          Validate the manifest, engine, browser executable, and permissions, then exit
-  --reconnect <file>  Keep attached automation sessions when the client is lost and write where it can return
+  --reconnect <file>  Keep attached automation sessions when the client is lost and write there how it can return
   --reconnect-ms <n>  How long the host waits for the client to return (default 60000)
   --timeout-ms <n> Bound one invoke request
   --help           Show this help

@@ -97,21 +97,31 @@ operation.
 
 When the client is lost, the host cancels every request that was in flight on that connection. Their terminals go
 to the lost client or to nobody, so a client that returns treats an effect it had sent as `outcomeUnknown`. The
-host then listens on a loopback port and writes the endpoint file in one step. It is one JSON object with five
-fields: `schemaVersion` (the integer 1), `pid` (the host process), `port` (the loopback port), `token` (a secret
-string), and `expiresAtMs` (when the wait ends, in Unix milliseconds).
+host then writes the endpoint file in one step. It is one JSON object with four fields: `schemaVersion` (the
+integer 1), `pid` (the host process), `token` (a secret string), and `expiresAtMs` (when the wait ends, in Unix
+milliseconds).
 
-A returning client connects to `127.0.0.1:<port>` and sends the token as its first line, followed by one newline.
-The host closes a connection whose first line is anything else, that sends more than 64 KiB before a newline, or
-that sends no line within 5 seconds, and keeps waiting. The connection that proves the token becomes the client:
-the host stops listening and removes the file. From there it is a new connection to the same host. The client
-sends `hello` again, request IDs start over, and every `targetRef` and `sessionRef` issued before still addresses
-the same target and session. Losing that client starts another wait with a new port and a new token.
+A waiting host does not listen. The returning client listens on a loopback port of its own and announces itself in
+the file `<file>.client`, written in one step. It is one JSON object with four fields: `schemaVersion` (the integer
+1), `port` (the client's loopback port), `token` (the endpoint token), and `clientToken` (a secret of the client,
+32 to 128 characters from `A-Z`, `a-z`, `0-9`, `_`, and `-`). The host looks for that file about ten times a second
+and reads at most 4 KiB of it. It removes every announcement it reads and follows one only when all four fields
+are valid and `token` is the token of the current wait.
 
-The token lets a local process become the client of a browser that may be signed in. Keep the file in a directory
-only the owning user can read, never log or copy the token, and choose the shortest wait that covers the restart
-you expect. The manifest's origins, actions, risk ceiling, and request guard belong to the host and are the same
-for the client that returns.
+The host then connects to `127.0.0.1:<port>` and sends one line: the HMAC-SHA256 of `clientToken` keyed with
+`token`, both as their ASCII bytes, in lowercase hex. The line proves that the connection comes from the host that
+holds the endpoint token and read the announcement, and it carries neither token. A client that receives any other
+first line closes that connection and keeps accepting. The client answers the host with `clientToken` and one
+newline. The host closes a connection whose answer is anything else, that sends more than 64 KiB before a newline,
+or that sends no line within 5 seconds, and keeps waiting with the same endpoint file. The connection that answers
+becomes the client and the host removes the endpoint file. From there it is a new connection to the same host. The
+client sends `hello` again, request IDs start over, and every `targetRef` and `sessionRef` issued before still
+addresses the same target and session. Losing that client starts another wait with a new token.
+
+The two files let a local process become the client of a browser that may be signed in. Keep them in a directory
+only the owning user can read and write, never log or copy the tokens, and choose the shortest wait that covers
+the restart you expect. The manifest's origins, actions, risk ceiling, and request guard belong to the host and are
+the same for the client that returns.
 
 The machine page starts through a single-use bootstrap URL. The server consumes its nonce once, injects the
 separate bearer capability into a module closure, and removes the bootstrap script before guest code runs.

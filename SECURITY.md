@@ -45,6 +45,13 @@ The browser the host launches opens no DevTools port: the broker speaks CDP over
 `--remote-debugging-pipe` descriptors, so no other local process can attach to it. A browser-only host
 (`engine.enabled` false) also serves no machine page and has no loopback listener at all.
 
+A host started with `--reconnect` keeps a browser session for a client that comes back, and it opens no listener
+to do so. The returning client listens on loopback and announces its port in a file beside the host's endpoint
+file, with the host's one-time token and a token of its own. The host connects only to a port announced with its
+token, proves itself with an HMAC of the client's token that puts neither token on the connection, and takes the
+connection as its client only after the client answers with its own token. The boundary is the operating-system
+user who can read and write that directory, so keep it private to the owning user.
+
 Certificate checks are never switched off. A self-signed local HTTPS target is trusted only when the manifest
 lists a loopback HTTPS origin with a certificate file that names that host; the manifest pins its public key and the
 isolated browser receives only that key as a certificate exception. Remote hosts cannot be listed.
