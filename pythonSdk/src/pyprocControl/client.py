@@ -7,8 +7,10 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import threading
+import time
 from collections import deque
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from pathlib import Path
@@ -101,12 +103,16 @@ class PyProcClient:
     def __init__(self, readable: TextIO, writable: TextIO, *, process: subprocess.Popen[str] | None = None,
                  stderr: TextIO | None = None, startupTimeout: float = 30.0,
                  cancelSettleTimeout: float = 5.0,
-                 eventHandler: Callable[[dict[str, Any]], None] | None = None) -> None:
+                 eventHandler: Callable[[dict[str, Any]], None] | None = None,
+                 connection: socket.socket | None = None, hostPid: int | None = None) -> None:
         if cancelSettleTimeout <= 0:
             raise ValueError("cancelSettleTimeout must be positive")
         self.readable = readable
         self.writable = writable
         self.process = process
+        # A client that came back to a waiting host has a socket and the host's process ID, and no process handle.
+        self.hostPid = hostPid
+        self._connection = connection
         self.eventHandler = eventHandler
         self.cancelSettleTimeout = cancelSettleTimeout
         self._stderr = stderr
@@ -151,8 +157,18 @@ class PyProcClient:
               startupTimeout: float = 30.0,
               cancelSettleTimeout: float = 5.0,
               eventHandler: Callable[[dict[str, Any]], None] | None = None,
-              environment: dict[str, str] | None = None) -> "PyProcClient":
+              environment: dict[str, str] | None = None,
+              reconnectFile: str | os.PathLike[str] | None = None,
+              reconnectSeconds: float | None = None) -> "PyProcClient":
+        """Start a host. With ``reconnectFile``, a host that loses this client while automation sessions are attached
+        keeps them for ``reconnectSeconds`` (60 by default) and writes there how ``reconnect`` can return to it."""
+        if reconnectFile is None and reconnectSeconds is not None:
+            raise ValueError("reconnectSeconds requires reconnectFile")
         args = [*resolvedCommand(command), "--config", str(Path(configPath).resolve())]
+        if reconnectFile is not None:
+            args += ["--reconnect", str(Path(reconnectFile).resolve())]
+            if reconnectSeconds is not None:
+                args += ["--reconnect-ms", str(round(reconnectSeconds * 1000))]
         process = subprocess.Popen(
             args,
             stdin=subprocess.PIPE,
@@ -180,6 +196,43 @@ class PyProcClient:
                     process.kill()
                     process.wait(timeout=5.0)
             raise
+
+    @classmethod
+    def reconnect(cls, reconnectFile: str | os.PathLike[str], *, startupTimeout: float = 30.0,
+                  cancelSettleTimeout: float = 5.0,
+                  eventHandler: Callable[[dict[str, Any]], None] | None = None) -> "PyProcClient":
+        """Become the client of a host that lost its client and waits (``start(reconnectFile=...)``).
+
+        It is the same host: session references from the lost connection still address its sessions, and requests
+        that were in flight ended with that connection. Raises ``OSError`` when no host waits there
+        (``FileNotFoundError``, ``ConnectionError``) and ``ValueError`` when the file is not an endpoint."""
+        endpoint = json.loads(Path(reconnectFile).read_text(encoding="utf-8"))
+        if (not isinstance(endpoint, dict) or endpoint.get("schemaVersion") != 1
+                or any(type(endpoint.get(key)) is not int for key in ("pid", "port", "expiresAtMs"))
+                or not isinstance(endpoint.get("token"), str)):
+            raise ValueError("pyproc-control reconnect file is not a version 1 endpoint")
+        if endpoint["expiresAtMs"] <= time.time() * 1000:
+            raise ConnectionError("pyproc-control host is no longer waiting for its client")
+        connection = socket.create_connection(("127.0.0.1", endpoint["port"]), timeout=startupTimeout)
+        try:
+            connection.settimeout(None)
+            readable = connection.makefile("r", encoding="utf-8", errors="strict")
+            writable = connection.makefile("w", encoding="utf-8", errors="strict", newline="\n")
+            # The host takes a connection only after its first line is the token it wrote to the file.
+            writable.write(endpoint["token"] + "\n")
+            writable.flush()
+            return cls(readable, writable, connection=connection, hostPid=endpoint["pid"],
+                       startupTimeout=startupTimeout, cancelSettleTimeout=cancelSettleTimeout,
+                       eventHandler=eventHandler)
+        except BaseException:
+            connection.close()
+            raise
+
+    @property
+    def connected(self) -> bool:
+        """False once the client was closed or its connection to the host was lost."""
+        with self._stateLock:
+            return not self._closed and self._connectionError is None
 
     @classmethod
     def check(cls, configPath: str | os.PathLike[str], *,
@@ -764,6 +817,12 @@ class PyProcClient:
             self.writable.close()
         except BaseException:
             pass
+        if self._connection is not None:
+            for end in (lambda: self._connection.shutdown(socket.SHUT_RDWR), self._connection.close):
+                try:
+                    end()
+                except OSError:
+                    pass
         process = self.process
         if process is not None and process.poll() is None:
             try:

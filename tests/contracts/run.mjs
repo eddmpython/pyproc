@@ -22,6 +22,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "canonicalNpmPackage.mjs",
   "controlJsSdk.mjs",
   "controlProtocol.mjs",
+  "controlReconnect.mjs",
   "delegatedTab.mjs",
   "downloadReceipt.mjs",
   "effectTransaction.mjs",

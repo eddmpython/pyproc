@@ -44,6 +44,18 @@ the shell argument vector, JavaScript and Python methods, and MCP tool. `run` st
 operation, returns a completed JSON terminal, and closes it. See
 [Machine Entrance](../../use-pyproc-machine/references/machine-entrance.md) for browser recipes and cleanup.
 
+A host normally ends with its client. To keep attached browser sessions when the client process is lost, name the
+file where the host writes how a client can come back, and how long it waits (60000 ms by default, at most
+1800000):
+
+```sh
+npx pyproc-control --config ./.pyproc/manifest.json --reconnect /absolute/path/reconnect.json --reconnect-ms 120000
+```
+
+The host can wait only if it outlives the process that started it. A host started by Python's `subprocess` (the
+Python SDK) keeps running when that process is killed. On Windows, Node.js ends the children of a process that
+dies, so a Node.js program starts the host with `spawn(..., { detached: true })` when it wants the host to wait.
+
 The command reserves stdout for UTF-8 NDJSON protocol frames and writes diagnostics to stderr. Do not mix
 MCP JSON-RPC and Control Protocol frames on one process. Start `pyproc-mcp` for MCP, or `pyproc-control` for
 the native protocol.
@@ -73,6 +85,33 @@ larger than 1 MiB closes the connection after one `fatal` error when a response 
 Request IDs are 1 to 128 ASCII characters from the documented identifier alphabet. An ID is single-use for
 the lifetime of one connection, including after its terminal frame. A request has exactly one `response` or
 request `error`. A late provider result after cancellation cannot create a second terminal.
+
+The host ends when its client goes away: stdin closes or a stdio pipe breaks. Bytes after the last newline when
+the input ends are the rest of a write the client did not finish; the host drops them and does not treat them as
+a malformed frame.
+
+Started with `--reconnect <file>`, a host that loses its client while at least one automation session is attached
+keeps the browser and those sessions and waits for a client to come back. A host that holds no attached session
+ends as before, and so does one whose wait runs out. Nothing else changes: there is no new frame and no new
+operation.
+
+When the client is lost, the host cancels every request that was in flight on that connection. Their terminals go
+to the lost client or to nobody, so a client that returns treats an effect it had sent as `outcomeUnknown`. The
+host then listens on a loopback port and writes the endpoint file in one step. It is one JSON object with five
+fields: `schemaVersion` (the integer 1), `pid` (the host process), `port` (the loopback port), `token` (a secret
+string), and `expiresAtMs` (when the wait ends, in Unix milliseconds).
+
+A returning client connects to `127.0.0.1:<port>` and sends the token as its first line, followed by one newline.
+The host closes a connection whose first line is anything else, that sends more than 64 KiB before a newline, or
+that sends no line within 5 seconds, and keeps waiting. The connection that proves the token becomes the client:
+the host stops listening and removes the file. From there it is a new connection to the same host. The client
+sends `hello` again, request IDs start over, and every `targetRef` and `sessionRef` issued before still addresses
+the same target and session. Losing that client starts another wait with a new port and a new token.
+
+The token lets a local process become the client of a browser that may be signed in. Keep the file in a directory
+only the owning user can read, never log or copy the token, and choose the shortest wait that covers the restart
+you expect. The manifest's origins, actions, risk ceiling, and request guard belong to the host and are the same
+for the client that returns.
 
 The machine page starts through a single-use bootstrap URL. The server consumes its nonce once, injects the
 separate bearer capability into a module closure, and removes the bootstrap script before guest code runs.

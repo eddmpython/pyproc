@@ -74,10 +74,17 @@ export class ControlHost {
     return true;
   }
 
-  async close(reason = "control host closed") {
-    this._closed = true;
+  /** End one connection's work and keep the host: abort each active request, wait until all have settled, and forget
+   * the used request IDs, so the next connection starts with its own. */
+  async endConnection(reason = "control connection ended") {
     const active = [...this._active.values()];
     for (const record of active) record.controller.abort(reason);
     await Promise.allSettled(active.map((record) => record.settled));
+    this._used.clear();
+  }
+
+  async close(reason = "control host closed") {
+    this._closed = true;
+    await this.endConnection(reason);
   }
 }

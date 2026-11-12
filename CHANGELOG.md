@@ -12,6 +12,35 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **A control client can come back to the same host and its browser sessions.** `pyproc-control --config <file>
+  --reconnect <file> [--reconnect-ms <n>]` keeps a host alive when it loses its client while automation sessions are
+  attached. It cancels the requests of the lost connection, listens on a loopback port, and writes an endpoint file
+  with a one-time token; the connection whose first line is that token becomes the client and uses the same
+  `targetRef` and `sessionRef` values after a new `hello`. A host that holds no session, or whose wait (60 seconds by
+  default, 30 minutes at most) runs out, ends as before. A host started without the option changes in one way: bytes
+  after the last newline when its input ends are dropped as the unfinished write of a lost client, where they used
+  to end the host with a fatal frame and exit code 1. On Windows a Node.js program must spawn the host detached for
+  it to outlive that program. The Python SDK adds `PyProcClient.start(reconnectFile=, reconnectSeconds=)`, `PyProcClient.reconnect(file)`, `hostPid`,
+  and `connected`. The JavaScript SDK has no helper for returning yet; the wire contract is in the Control Protocol
+  reference. The manifest's origins, actions, risk ceiling, and request guard are those of the host and do not
+  change with the client. Gate: `test:contracts` (control reconnect: a wrong, short, or oversized first line is
+  refused while the host keeps waiting, an unfinished last line does not end a host that holds a session, the wait
+  is bounded, the endpoint file is removed), `test:control-product`
+  (an installed host and a real browser: stdin closes, the same session answers over the socket), `test:python-sdk`
+  (the bundled host and `PyProcClient.reconnect`).
+
+  한국어: 제어하던 프로그램이 죽어도 host와 브라우저 세션이 살아 있고, 다시 뜬 프로그램이 같은 세션으로 돌아온다.
+  `--reconnect <파일>`로 띄운 host는 세션이 붙어 있는 동안 client를 잃으면 그 연결의 요청을 끝내고, 이 PC 안에서만
+  닿는 포트를 열어 주소와 한 번 쓰는 token을 그 파일에 적는다. 첫 줄로 그 token을 보낸 연결만 client가 되어 전에 받은
+  `targetRef`·`sessionRef`를 그대로 쓴다. 세션이 없거나 기다리는 시간(기본 60초, 최대 30분)이 지나면 전처럼 끝난다.
+  이 옵션 없이 띄운 host는 한 가지만 달라진다: 입력이 끝날 때 줄바꿈 없이 남은 마지막 줄을 잘못된 프레임으로 보지
+  않고 버린다(전에는 fatal 프레임을 쓰고 1로 끝났다). Windows에서 Node.js 프로그램은 host를 `detached: true`로
+  띄워야 그 프로그램이 죽어도 host가 남는다. Python SDK에는 `start(reconnectFile=, reconnectSeconds=)`,
+  `reconnect(file)`, `hostPid`, `connected`가 생겼고 JavaScript SDK의 돌아오는 함수는 아직 없다. 허용한 주소·행동·
+  위험 등급과 요청 보호는 host의 것이라 돌아온 client에게도 같다.
+
 ## 0.0.44 - 2026-11-11
 
 ### Changed

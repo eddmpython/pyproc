@@ -559,6 +559,7 @@ export class McpBrowserControl {
     this._toolNames = new Set(this.tools.map((tool) => tool.name));
     this._rawMethods = new Set(config.rawMethods);
     this._brokerPromise = null;
+    this._broker = null;
     this._automation = null;
     this._artifactStore = null;
     this._profileDir = profileDir;
@@ -716,6 +717,11 @@ export class McpBrowserControl {
       reference: reference || null, heldSurfaces: broker.port.inspect().heldSurfaces });
   }
 
+  /** How many automation sessions are attached now; 0 while the browser has not been used yet. */
+  attachedSessions() {
+    return this._broker ? this._broker.port.inspect().sessions : 0;
+  }
+
   async close() {
     this._automation?.close();
     await this._artifactStore?.close();
@@ -744,6 +750,7 @@ export class McpBrowserControl {
       });
     }
     const broker = await this._brokerPromise;
+    this._broker = broker;
     if (!this._artifactStore) {
       this._artifactStore = new BrowserArtifactStore({ root: artifactDir, ...this.config.artifacts });
     }

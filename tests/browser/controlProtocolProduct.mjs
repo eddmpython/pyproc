@@ -11,6 +11,7 @@ import { binPath, installPackedPyProc, ROOT, run, runAsync } from "../packageHar
 import { createSelfSignedCertificate } from "../support/selfSignedCertificate.mjs";
 import { connectCdpWebSocket, readDevToolsEndpoint } from "../support/cdpWebSocket.mjs";
 import { listeningSocketsOf } from "../support/listeningSockets.mjs";
+import { checkControlReconnect } from "./controlReconnectHost.mjs";
 import { checkSecretInput } from "./secretInput.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
@@ -712,6 +713,12 @@ try {
   check("Machine host의 listen socket은 machine page 서버 하나뿐이고 브라우저 DevTools port는 없음",
     machineHostListeners.length === 1 && machineHostListeners[0].pid !== browserOnlyClient.process.pid,
     JSON.stringify(machineHostListeners));
+  const reconnected = await checkControlReconnect({ packageRoot, configPath: browserOnlyPath, cwd: installed.appDir,
+    targetOrigin, heading: "control-ready", timeoutMs: TIMEOUT_MS });
+  check("session을 쥔 host가 client를 잃어도 살아 있고 token을 낸 client만 같은 session으로 돌아옴",
+    reconnected.hostKeptRunning && reconnected.strangerRefused && reconnected.sameSessionSeesPage
+      && reconnected.endpointRemoved && reconnected.exitCode === 0 && reconnected.endpointGoneAfterExit,
+    JSON.stringify(reconnected));
   await checkSecretInput(installed);
   check("일회용 비밀 입력이 실제 로그인 필드에 적용되고 관찰과 기록에서 값을 가린다", true);
 } catch (error) {

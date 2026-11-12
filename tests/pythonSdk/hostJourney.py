@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import sysconfig
+import time
 from pathlib import Path
 
 from pyprocControl import PyProcClient
@@ -76,6 +77,32 @@ with PyProcClient.start(browserOnlyConfig, startupTimeout=90.0) as client:
     except BaseException:
         print(client.diagnostics[-6000:], file=sys.stderr)
         raise
+# A host that loses its client while a session is attached waits, and the client that returns uses the same session.
+reconnectFile = Path(projectRoot) / "hostProfile" / "reconnect.json"
+first = PyProcClient.start(browserOnlyConfig, startupTimeout=90.0, reconnectFile=reconnectFile, reconnectSeconds=60.0)
+try:
+    host = first.process
+    target = first.openTarget(targetOrigin + "/host", expectedRisk="externalEffect", waitUntil="load",
+                              timeout=60.0).output["targetRef"]
+    session = first.attachSession(target, timeout=30.0).output
+    host.stdin.close()
+    deadline = time.monotonic() + 30.0
+    while not reconnectFile.exists():
+        assert host.poll() is None and time.monotonic() < deadline, "the host did not wait for its client"
+        time.sleep(0.05)
+    with PyProcClient.reconnect(reconnectFile, startupTimeout=30.0) as returned:
+        assert returned.process is None and returned.hostPid == host.pid and returned.connected
+        seen = returned.observe(session, {"expectedRisk": "read"}, timeout=60.0).output
+        returned.detachSession(session, timeout=30.0)
+        returned.closeTarget(target, expectedRisk="externalEffect", timeout=30.0)
+    # Nothing is held any more, so the host ended with the client that left.
+    report["reconnectObserved"] = ("python-sdk-ready" in json.dumps(seen) and host.wait(timeout=30.0) == 0
+                                   and not reconnectFile.exists())
+except BaseException:
+    print(first.diagnostics[-6000:], file=sys.stderr)
+    raise
+finally:
+    first.close()
 if os.name == "nt":
     helper = HOST_ROOT / descriptor["browserDesktop"]["path"]
     assert helper.is_file() and helper.name == "pyproc-browser-desktop.exe", descriptor.get("browserDesktop")

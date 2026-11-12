@@ -1,7 +1,12 @@
 """Installed Python codec positive and negative contract fixtures."""
 
+import json
+import socket
+import tempfile
 import threading
+import time
 from concurrent.futures import Future
+from pathlib import Path
 
 from pyprocControl import ActionConvergenceReceipt, ControlError, ControlProtocolError, ControlResult, PerceptionClient, PerceptionQueryResult, controlBase, decodeFrame, encodeFrame, validateFrame
 from pyprocControl.client import ControlRequest, PyProcClient
@@ -286,4 +291,54 @@ assert all(call[1][key].startswith(("/", "\\")) or ":\\" in call[1][key]
            for call in verificationFixture.calls
            for key in call[1] if key in {"contractRoot", "repositoryRoot", "referenceDir", "currentDir", "packDir"})
 
-print("python sdk protocol contract green: 22 fixtures")
+
+def raised(operation):
+    try:
+        operation()
+    except Exception as error:
+        return error
+    return None
+
+
+# A host that waits for its client: the token is the first line, then the usual hello on the same connection.
+assert isinstance(raised(lambda: PyProcClient.start("unused.json", reconnectSeconds=5.0)), ValueError)
+with tempfile.TemporaryDirectory() as reconnectFolder, socket.create_server(("127.0.0.1", 0)) as waitingHost:
+    reconnectFile = Path(reconnectFolder) / "endpoint.json"
+    endpoint = {"schemaVersion": 1, "pid": 4242, "port": waitingHost.getsockname()[1], "token": "fixture-token",
+                "expiresAtMs": int(time.time() * 1000) + 60_000}
+
+    def reconnectError(written):
+        reconnectFile.write_text(json.dumps(written), encoding="utf-8")
+        return raised(lambda: PyProcClient.reconnect(reconnectFile, startupTimeout=5.0))
+
+    assert isinstance(raised(lambda: PyProcClient.reconnect(Path(reconnectFolder) / "absent.json")), FileNotFoundError)
+    assert isinstance(reconnectError({**endpoint, "schemaVersion": 2}), ValueError)
+    assert isinstance(reconnectError({**endpoint, "port": "1"}), ValueError)
+    assert isinstance(reconnectError({key: endpoint[key] for key in endpoint if key != "token"}), ValueError)
+    assert isinstance(reconnectError({**endpoint, "expiresAtMs": 1}), ConnectionError)
+    waitingHostSaw = {}
+
+    def waitingHostLoop():
+        accepted, _address = waitingHost.accept()
+        with accepted, accepted.makefile("r", encoding="utf-8", newline="\n") as lines:
+            waitingHostSaw["firstLine"] = lines.readline()
+            hello = decodeFrame(lines.readline())
+            waitingHostSaw["helloRole"] = hello["role"]
+            accepted.sendall(encodeFrame({**controlBase("hello"), "requestId": hello["requestId"], "role": "server",
+                                          "peer": {"name": "fixture-host", "version": "1"},
+                                          "capabilities": hello["capabilities"],
+                                          "operations": ["automation.observe"]}).encode("utf-8"))
+            waitingHostSaw["afterClose"] = lines.readline()
+
+    waitingHostThread = threading.Thread(target=waitingHostLoop, daemon=True)
+    waitingHostThread.start()
+    reconnectFile.write_text(json.dumps(endpoint), encoding="utf-8")
+    returned = PyProcClient.reconnect(reconnectFile, startupTimeout=5.0)
+    assert returned.connected is True and returned.process is None and returned.hostPid == 4242
+    assert returned.operations == ("automation.observe",)
+    returned.close()
+    waitingHostThread.join(5.0)
+    assert returned.connected is False
+    assert waitingHostSaw == {"firstLine": "fixture-token\n", "helloRole": "client", "afterClose": ""}, waitingHostSaw
+
+print("python sdk protocol contract green: 23 fixtures")

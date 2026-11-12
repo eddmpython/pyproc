@@ -206,7 +206,7 @@ try {
     wheelMetadata.includes(`Version: ${PACKAGE_VERSION}`) && sourceMetadata.includes(`Version: ${PACKAGE_VERSION}`));
 
   const protocol = run(sourcePython, [join(HERE, "protocolContract.py")], { cwd: installed.appDir });
-  check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("22 fixtures"));
+  check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("23 fixtures"));
 
   const productPath = join(installed.appDir, "node_modules", ".bin");
   const journey = await runAsync(wheelPython, [join(HERE, "productJourney.py"), configPath,
@@ -284,10 +284,10 @@ try {
       targetOrigin, PACKAGE_VERSION, ...(browser ? [browser] : [])],
     { cwd: installed.tmp, env: { ...hostEnv, PATH: hostPath } });
     const hostReport = JSON.parse(hostRun.stdout.trim().split(/\r?\n/).at(-1));
-    check("platform wheel 하나가 Node 없는 PATH에서 번들 host로 Machine과 브라우저 전용 세션을 열고 닫음",
+    check("platform wheel 하나가 Node 없는 PATH에서 번들 host로 Machine과 브라우저 전용 세션을 열고 닫고, 잃은 client가 같은 세션으로 돌아옴",
       hostReport.ok === true && hostReport.version === PACKAGE_VERSION && hostReport.machineValue === "42"
         && hostReport.machineObserved === true && hostReport.browserOnlyObserved === true
-        && hostReport.browserOnlyMachineOperations.length === 0
+        && hostReport.browserOnlyMachineOperations.length === 0 && hostReport.reconnectObserved === true
         // The win_amd64 wheel's own browser desktop helper opens a headed browser on a private desktop.
         && (HOST_PLATFORM !== "win_amd64" || hostReport.privateDesktopObserved === true),
       `${hostWheel.filename} ${hostWheel.bytes.byteLength} bytes`);

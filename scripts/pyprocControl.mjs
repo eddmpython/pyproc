@@ -9,6 +9,7 @@ import { findBrowser } from "./browserControl/browserLauncher.mjs";
 import { assertAutomationRecordingSelection, loadAutomationRecording } from "./automationSpace/automationRecording.js";
 import { applyMcpProductEnvironment, loadMcpProductConfig } from "./mcpProductConfig.mjs";
 import { PyProcControlClient } from "./controlProtocol/controlApi.js";
+import { applyControlReconnectEnvironment, controlReconnectOptions } from "./controlProtocol/controlServer.mjs";
 import {
   parseMachineDoctorArguments,
   parseMachineInvokeArguments,
@@ -34,11 +35,13 @@ const HELP = `Usage:
   pyproc-control eyes audit --config <file> --contract-root <dir> --repository-root <dir> --output-dir <relative-dir> --environment <id>
   pyproc-control eyes verify --config <file> --reference-dir <dir> --current-dir <dir>
   pyproc-control eyes replay --config <file> --pack-dir <dir>
-  pyproc-control --config <file> [--check]
+  pyproc-control --config <file> [--check] [--reconnect <file> [--reconnect-ms <n>]]
 
 Options:
   --config <file>  Version 1 product manifest with an engine and optional automation authority
   --check          Validate the manifest, engine, browser executable, and permissions, then exit
+  --reconnect <file>  Keep attached automation sessions when the client is lost and write where it can return
+  --reconnect-ms <n>  How long the host waits for the client to return (default 60000)
   --timeout-ms <n> Bound one invoke request
   --help           Show this help
   --version        Print the installed package version
@@ -129,17 +132,26 @@ function parseArgs(argv) {
   let check = false;
   let help = false;
   let version = false;
+  let reconnectFile = "";
+  let reconnectMs = "";
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--config") {
       config = argv[++index] || "";
       if (!config) throw new TypeError("--config requires a JSON file");
+    } else if (arg === "--reconnect") {
+      reconnectFile = argv[++index] || "";
+      if (!reconnectFile) throw new TypeError("--reconnect requires a file");
+    } else if (arg === "--reconnect-ms") {
+      reconnectMs = argv[++index] || "";
+      if (!reconnectMs) throw new TypeError("--reconnect-ms requires a number");
     } else if (arg === "--check") check = true;
     else if (arg === "--help" || arg === "-h") help = true;
     else if (arg === "--version" || arg === "-v") version = true;
     else throw new TypeError(`unknown pyproc-control option: ${arg}`);
   }
-  return { config, check, help, version };
+  const reconnect = controlReconnectOptions({ file: reconnectFile && resolve(reconnectFile), windowMs: reconnectMs });
+  return { config, check, help, version, reconnect };
 }
 
 async function packageVersion() {
@@ -252,6 +264,7 @@ try {
         }, null, 2)}\n`);
       } else {
         applyMcpProductEnvironment(loaded.env);
+        applyControlReconnectEnvironment(args.reconnect);
         await import("./controlProtocolServer.mjs");
       }
     }
