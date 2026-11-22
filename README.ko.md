@@ -4,6 +4,9 @@ pyproc은 브라우저 안에서 동작하는 컴퓨터다. 저장소가 소유�
 WASI kernel을 사용한다. npm package에 검증된 engine과 표준 라이브러리가 포함되므로 별도 engine
 다운로드나 원격 실행 서비스가 필요하지 않다.
 
+pyproc은 웹브라우저도 다룬다. 전용 자동화 프로필이나 이미 로그인한 Chrome·Edge 창에서 페이지를 열고,
+읽고, 스크린샷을 찍고, 입력란을 채우고, 누른다. [브라우저 자동화](#브라우저-자동화)를 본다.
+
 ## 설치
 
 ```sh
@@ -143,6 +146,36 @@ slim Buildroot linux image에는 CPython이 없다. catalog 자산
 
 `linuxPython.pip`는 serial로 `python3 -m pip`를 보낸다. receipt `stdout`은 그 serial 원문이다.
 네트워크 index와 임의 wheel은 시험된 문 밖이다. WASI `%pip`는 소유 카탈로그의 다른 경로다.
+
+### 브라우저 자동화
+
+설치된 `pyproc-mcp` 명령은 Python Machine과 따로 권한을 받은 Chromium 자동화 프로필을 한 MCP
+세션에서 돌린다. 에이전트는 페이지를 열고, 읽고, 스크린샷을 찍고, 입력란을 채우고, 누를 수 있다.
+manifest에 쓸 수 있는 origin과 동작을 적고, 그 밖의 것은 pyproc이 거절한다. 평소 쓰는 브라우저
+프로필에는 붙지 않는다.
+
+```sh
+npx pyproc-mcp init \
+  --recipe authorizedBrowser \
+  --origin https://example.test \
+  --action snapshot --action screenshot --action waitFor \
+  --action hydrateLazy --action navigate --action fill --action click \
+  --max-risk externalEffect \
+  --purpose "authorized regression testing" \
+  --acknowledge-effects
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+```
+
+이미 로그인한 곳에서 일하려면 user-browser provider가 짝지은 확장으로 내 Chrome이나 Edge의 작업 창
+하나에서 같은 동작을 한다(Windows):
+
+```powershell
+npx pyproc-control user-browser setup
+npx pyproc-control user-browser pair --browser edge
+```
+
+manifest, locator, 스크린샷, artifact는 [Browser automation](skills/automate-browser-with-pyproc/references/browser-automation.md)에,
+짝짓기, 막은 사이트, 다운로드는 [User browser](skills/automate-browser-with-pyproc/references/user-browser.md)에 있다.
 
 ### 제어
 

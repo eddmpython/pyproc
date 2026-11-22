@@ -4,6 +4,10 @@ pyproc is a browser computer built around an owned, worker-hosted CPython 3.14 W
 package includes the verified engine and standard library, so the default runtime does not require a
 separate engine download or a remote execution service.
 
+pyproc also drives web browsers: it can open pages, read them, take screenshots, fill forms, and
+click, in its own automation profile or in a window of your signed-in Chrome or Edge. See
+[Browser automation](#browser-automation).
+
 ## Install
 
 ```sh
@@ -146,6 +150,37 @@ kernel. The slim Buildroot linux image stays without CPython. The catalog asset
 `linuxPython.pip` sends `python3 -m pip` over serial. The receipt `stdout` is that serial transcript.
 Network indexes and arbitrary wheels are outside the tested door. WASI `%pip` stays on the owned
 catalog and is a different path.
+
+### Browser automation
+
+The installed `pyproc-mcp` command runs a Python Machine and a separately authorized Chromium
+automation profile in one MCP session, so an agent can open a page, read it, take screenshots,
+fill fields, and click. A manifest lists the origins and actions it may use, and
+pyproc refuses everything else. It never attaches to your normal browser profile.
+
+```sh
+npx pyproc-mcp init \
+  --recipe authorizedBrowser \
+  --origin https://example.test \
+  --action snapshot --action screenshot --action waitFor \
+  --action hydrateLazy --action navigate --action fill --action click \
+  --max-risk externalEffect \
+  --purpose "authorized regression testing" \
+  --acknowledge-effects
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+```
+
+To work where you are already signed in, the user-browser provider runs the same actions in one
+task window of your own Chrome or Edge through a paired extension (Windows):
+
+```powershell
+npx pyproc-control user-browser setup
+npx pyproc-control user-browser pair --browser edge
+```
+
+[Browser automation](skills/automate-browser-with-pyproc/references/browser-automation.md) covers
+the manifest, locators, screenshots, and artifacts. [User browser](skills/automate-browser-with-pyproc/references/user-browser.md)
+covers pairing, blocked sites, and downloads.
 
 ### Control
 
